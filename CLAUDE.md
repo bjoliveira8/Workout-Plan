@@ -114,11 +114,16 @@ lazily on first user gesture (`ensureAudio`) because browsers block autoplay.
   back on border boldness FOUR times. Never ship thicker/brighter button borders.
 - Buttons: Barlow Condensed, weight 700, uppercase, letter-spacing — uniformly.
   Numbers/inputs: Barlow Condensed tabular-nums. Body text: Inter.
-- Exercise names are Title Case ("Plyo Push-Up") and must stay on ONE line
-  (`.exname` ellipsizes). Every exercise carries a category tag (primer, main lift,
-  superset, press, row, ballistic, unilateral, rotation, carry, core).
-- Card header: name+tags left, YouTube icon (red glyph, icon-only, no label) +
-  done-check top-right. "Alt Exercise" button on its own row beneath.
+- Exercise names are Title Case ("Plyo Push-Up"). **They wrap to up to 2 lines
+  (`.exname` uses `-webkit-line-clamp:2`) — never single-line-ellipsize.** (v13 change:
+  the old one-line ellipsis cut off long names like "Rear-Foot-Elevated Split Squat" on
+  iPhone width, especially after the reorder arrows were added.) Every exercise carries a
+  category tag (primer, main lift, superset, press, row, ballistic, unilateral, rotation,
+  carry, core), shown in a `.tagrow` **below** the name.
+- Card header: `.ex-title` (name, then tag row) on the left; on the right `.ex-actions` =
+  a compact vertical `.reorder` ▲/▼ stack, the YouTube icon (red glyph, icon-only), and the
+  done-check. Keep `.ex-actions` narrow — it competes with the name for width at 375px.
+  "Alt Exercise" button and the main-lift bar-speed control sit on rows beneath.
 - Header (week wave strip, day tabs) is NOT sticky — it scrolls away.
 - Plan name is user-editable (Settings → Plan name) and shown uppercase in the brand.
 

@@ -584,10 +584,15 @@ export default function PressPriorityTracker() {
     return (
       <section className={`card ${ex.wave ? "main" : ""} ${exDone ? "exdone" : ""}`} key={ex.id}>
         <div className="ex-head">
-          <h2><span className="exname">{activeName}</span>{subbed && <em className="tag alt-tag">sub</em>}{ex.tag && <em className="tag">{ex.tag}</em>}</h2>
+          <div className="ex-title">
+            <h2 className="exname">{activeName}</h2>
+            {(subbed || ex.tag) && <div className="tagrow">{subbed && <em className="tag alt-tag">sub</em>}{ex.tag && <em className="tag">{ex.tag}</em>}</div>}
+          </div>
           <div className="ex-actions">
-            <button className="movebtn" aria-label={`Move ${activeName} up`} onClick={() => moveEx(ex.id, -1)}>▲</button>
-            <button className="movebtn" aria-label={`Move ${activeName} down`} onClick={() => moveEx(ex.id, 1)}>▼</button>
+            <div className="reorder">
+              <button className="movebtn" aria-label={`Move ${activeName} up`} onClick={() => moveEx(ex.id, -1)}>▲</button>
+              <button className="movebtn" aria-label={`Move ${activeName} down`} onClick={() => moveEx(ex.id, 1)}>▼</button>
+            </div>
             <a className="ytbtn" href={ytUrl(activeName)} target="_blank" rel="noopener noreferrer" aria-label={`Watch a video example of ${activeName} on YouTube`}>
               <svg viewBox="0 0 28 20" width="26" height="19" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#FF0000"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg>
             </a>
@@ -918,14 +923,17 @@ const css = `
 .card.skipped{opacity:.55}
 .card.exdone{border-color:var(--ok)}
 .card.exdone .ex-head h2{color:var(--muted)}
-.ex-head{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0}
-.ex-head h2{font-size:15px;font-weight:600;line-height:1.25;flex:1;min-width:0;display:flex;align-items:center;gap:0;overflow:hidden}
-.exname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.ex-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.ex-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-width:0}
+.ex-title{flex:1;min-width:0}
+.ex-head h2{font-size:15px;font-weight:600;line-height:1.2}
+.exname{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.ex-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.reorder{display:flex;flex-direction:column;flex-shrink:0}
 .ex-tools{display:flex;align-items:center;gap:8px;margin-top:10px}
 .ytbtn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:99px;background:transparent;text-decoration:none}
 .ytbtn svg{display:block;border-radius:5px}
-.tag{flex:none;font-style:normal;font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:2px 8px;margin-left:7px;white-space:nowrap}
+.tag{flex:none;font-style:normal;font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:2px 8px;margin-left:0;white-space:nowrap}
 .alt-tag{color:var(--accent);border-color:var(--accentDim)}
 .inlbtn{min-height:34px;padding:0 13px;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:8px;color:color-mix(in srgb,var(--accent) 75%,var(--muted));background:transparent;font-family:'Barlow Condensed';font-weight:700;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap}
 .inlbtn.on{border-color:var(--accentDim);background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--accent)}
@@ -1003,7 +1011,7 @@ const css = `
 .toggle-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line);margin-top:10px;font-size:13px}
 .pill{min-width:64px;min-height:36px;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:99px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase}
 .pill.on{border-color:var(--ok);color:var(--ok)}
-.movebtn{width:24px;height:30px;padding:0;color:var(--faint);font-size:11px;line-height:1;background:none;border:none}
+.movebtn{width:22px;height:16px;padding:0;color:var(--faint);font-size:10px;line-height:1;background:none;border:none}
 .movebtn:active{color:var(--accent)}
 .barspeed-row{display:flex;align-items:center;gap:8px;margin-top:10px}
 .bs-label{flex:0 0 auto;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
