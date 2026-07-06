@@ -1,0 +1,17 @@
+{
+  "name": "press-priority-tracker",
+  "version": "12.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test.mjs",
+    "deploy": "node deploy.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "jsdom": "^25.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0"
+  }
+}
