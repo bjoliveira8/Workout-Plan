@@ -233,6 +233,8 @@ export default function PressPriorityTracker() {
   const [status, setStatus] = useState("loading");
   const [timer, setTimer] = useState(null); // { label, endsAt }
   const [order, setOrder] = useState({});         // { "week-day": [exId, ...] } — custom session order
+  const [dragId, setDragId] = useState(null);     // exercise id currently being drag-reordered (null = none)
+  const dragRef = useRef(null);                   // live drag session data (not state — avoids re-render churn per move)
   const [barSpeed, setBarSpeed] = useState({});   // { "week-day-exId": "fast"|"on-target"|"grindy" }
   const [sessionTime, setSessionTime] = useState({}); // { "week-day": { start, end } }
   const [warmOpen, setWarmOpen] = useState(false);
@@ -521,6 +523,67 @@ export default function PressPriorityTracker() {
     setOrder(p => ({ ...p, [sessKey]: [...nv, ...hidden] }));
   };
   const resetOrder = () => setOrder(p => { const n = { ...p }; delete n[sessKey]; return n; });
+  // Place exId at targetIdx within the visible list and persist (used by drag-and-drop).
+  const reorderTo = (exId, targetIdx) => {
+    const vis = visibleEx.map(e => e.id);
+    const from = vis.indexOf(exId);
+    if (from < 0 || targetIdx < 0 || targetIdx >= vis.length || from === targetIdx) return;
+    const nv = [...vis]; nv.splice(from, 1); nv.splice(targetIdx, 0, exId);
+    const hidden = orderedEx.map(e => e.id).filter(id => !vis.includes(id));
+    setOrder(p => ({ ...p, [sessKey]: [...nv, ...hidden] }));
+  };
+  // ── Touch/pointer drag-to-reorder ─────────────────────────────────────────
+  // The dragged card follows the finger via a direct-DOM transform (no per-move
+  // re-render); neighbours reflow naturally because we only commit `order` state
+  // when the card crosses into a new slot. Cards keep stable keys, so React moves
+  // the existing DOM node (no remount → the manual transform survives the reorder).
+  const cardCenters = (exceptId) =>
+    [...document.querySelectorAll(".session .card[data-exid]")]
+      .filter(el => el.dataset.exid !== exceptId)
+      .map(el => { const r = el.getBoundingClientRect(); return { id: el.dataset.exid, mid: r.top + r.height / 2 }; });
+  const startDrag = (e, exId) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const el = e.currentTarget.closest(".card[data-exid]");
+    if (!el) return;
+    e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    const r = el.getBoundingClientRect();
+    dragRef.current = {
+      exId, pointerId: e.pointerId, el, height: r.height,
+      grabOffset: e.clientY - r.top,   // where inside the card the finger grabbed
+      translate: 0,
+      curIdx: visibleEx.findIndex(x => x.id === exId),
+    };
+    setDragId(exId);
+    document.body.style.userSelect = "none";
+  };
+  const onDragMove = (e) => {
+    const d = dragRef.current;
+    if (!d || e.pointerId !== d.pointerId) return;
+    // Keep the card pinned under the finger, re-deriving its natural top each move
+    // (natural top = current rect top − current transform), so it stays correct even
+    // after the list reorders beneath it.
+    const rect = d.el.getBoundingClientRect();
+    const naturalTop = rect.top - d.translate;
+    const t = (e.clientY - d.grabOffset) - naturalTop;
+    d.el.style.transform = `translateY(${t}px)`;
+    d.translate = t;
+    // Insertion index = how many other cards have their midpoint above the dragged card's centre.
+    const center = (e.clientY - d.grabOffset) + d.height / 2;
+    const target = cardCenters(d.exId).filter(o => o.mid < center).length;
+    if (target !== d.curIdx) { d.curIdx = target; reorderTo(d.exId, target); }
+  };
+  const endDrag = (e) => {
+    const d = dragRef.current;
+    if (!d || (e && e.pointerId != null && e.pointerId !== d.pointerId)) return;
+    const el = d.el;
+    el.style.transition = "transform .16s ease";
+    el.style.transform = "";                 // snap into the (now correct) slot
+    setTimeout(() => { if (el) { el.style.transition = ""; el.style.transform = ""; } }, 180);
+    document.body.style.userSelect = "";
+    dragRef.current = null;
+    setDragId(null);
+  };
   const setsLoggedCount = () => {
     let n = 0;
     visibleEx.forEach(ex => (logs?.[week]?.[day]?.[ex.id] || []).forEach(e => { if (e && (e.w || e.r)) n++; }));
@@ -582,17 +645,18 @@ export default function PressPriorityTracker() {
     const activeName = subbed ? ex.alt : ex.name;
     const prevNote = week > 1 && week <= 12 ? exNotes[`${week-1}-${day}-${ex.id}`] : null;
     return (
-      <section className={`card ${ex.wave ? "main" : ""} ${exDone ? "exdone" : ""}`} key={ex.id}>
+      <section className={`card ${ex.wave ? "main" : ""} ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
         <div className="ex-head">
           <div className="ex-title">
             <h2 className="exname">{activeName}</h2>
             {(subbed || ex.tag) && <div className="tagrow">{subbed && <em className="tag alt-tag">sub</em>}{ex.tag && <em className="tag">{ex.tag}</em>}</div>}
           </div>
           <div className="ex-actions">
-            <div className="reorder">
-              <button className="movebtn" aria-label={`Move ${activeName} up`} onClick={() => moveEx(ex.id, -1)}>▲</button>
-              <button className="movebtn" aria-label={`Move ${activeName} down`} onClick={() => moveEx(ex.id, 1)}>▼</button>
-            </div>
+            <button className="draghandle" aria-label={`Reorder ${activeName} — drag, or press then use the up and down arrow keys`}
+              onPointerDown={e => startDrag(e, ex.id)} onPointerMove={onDragMove} onPointerUp={endDrag} onPointerCancel={endDrag}
+              onKeyDown={e => { if (e.key === "ArrowUp") { e.preventDefault(); moveEx(ex.id, -1); } else if (e.key === "ArrowDown") { e.preventDefault(); moveEx(ex.id, 1); } }}>
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><g fill="currentColor"><circle cx="6" cy="3.5" r="1.35"/><circle cx="10" cy="3.5" r="1.35"/><circle cx="6" cy="8" r="1.35"/><circle cx="10" cy="8" r="1.35"/><circle cx="6" cy="12.5" r="1.35"/><circle cx="10" cy="12.5" r="1.35"/></g></svg>
+            </button>
             <a className="ytbtn" href={ytUrl(activeName)} target="_blank" rel="noopener noreferrer" aria-label={`Watch a video example of ${activeName} on YouTube`}>
               <svg viewBox="0 0 28 20" width="26" height="19" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#FF0000"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg>
             </a>
@@ -875,7 +939,7 @@ const css = `
 .app input.under{border-color:var(--warn);color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--inputBg))}
 .app input.over{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,var(--inputBg))}
 .app button:focus-visible,.app input:focus-visible,.app a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.hdr{padding:14px 16px 0;background:var(--bg);border-bottom:1px solid var(--line)}
+.hdr{padding:calc(18px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-right,0px)) 0 calc(16px + env(safe-area-inset-left,0px));background:var(--bg);border-bottom:1px solid var(--line)}
 .hdr-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .brand{font-family:'Barlow Condensed';font-weight:700;font-size:18px;letter-spacing:.14em}
 .brand span{color:var(--accent)}
@@ -929,7 +993,8 @@ const css = `
 .exname{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
 .tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .ex-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.reorder{display:flex;flex-direction:column;flex-shrink:0}
+.draghandle{display:flex;align-items:center;justify-content:center;width:30px;min-height:42px;padding:0;color:var(--faint);background:none;border:none;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+.draghandle:active{cursor:grabbing;color:var(--accent)}
 .ex-tools{display:flex;align-items:center;gap:8px;margin-top:10px}
 .ytbtn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:99px;background:transparent;text-decoration:none}
 .ytbtn svg{display:block;border-radius:5px}
@@ -1011,8 +1076,8 @@ const css = `
 .toggle-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--line);margin-top:10px;font-size:13px}
 .pill{min-width:64px;min-height:36px;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:99px;color:var(--muted);font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase}
 .pill.on{border-color:var(--ok);color:var(--ok)}
-.movebtn{width:22px;height:16px;padding:0;color:var(--faint);font-size:10px;line-height:1;background:none;border:none}
-.movebtn:active{color:var(--accent)}
+.card.dragging{position:relative;z-index:50;box-shadow:0 10px 28px rgba(0,0,0,.45);cursor:grabbing}
+.card.dragging .draghandle{color:var(--accent)}
 .barspeed-row{display:flex;align-items:center;gap:8px;margin-top:10px}
 .bs-label{flex:0 0 auto;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
 .barspeed{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;flex:1}

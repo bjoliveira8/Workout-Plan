@@ -93,12 +93,14 @@ else {
   } catch (e) { fail.push("json-parse"); }
 }
 
-// 7.8) Reorder: moving the first exercise down changes order and persists
+// 7.8) Reorder: nudging the first exercise down (ArrowDown on its drag handle)
+//      changes the order and persists it. The drag handle is keyboard-operable so
+//      the same moveEx path that pointer-drag commits can be exercised in jsdom.
 const firstBefore = doc.querySelector(".session .card .exname")?.textContent;
-const downBtn = [...doc.querySelectorAll(".session .card .movebtn")].find((b) => (b.getAttribute("aria-label") || "").includes(" down"));
-if (!downBtn) fail.push("reorder-controls-missing");
+const handle = doc.querySelector(".session .card[data-exid] .draghandle");
+if (!handle) fail.push("reorder-controls-missing");
 else {
-  downBtn.click();
+  handle.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   await new Promise((r) => setTimeout(r, 900));
   const firstAfter = doc.querySelector(".session .card .exname")?.textContent;
   const s = window.localStorage.getItem("pp-tracker-v3") || "";
