@@ -1,97 +1,370 @@
 import { useState, useEffect, useRef } from "react";
 
-/* ═══════════ PROGRAM DATA — v1.3 ═══════════ */
-const RM = { bench: 215, ohp: 128, squat: 282, dl: 515 };
+/* ═══════════ PROGRAM DATA — Astra Concurrent Block v2.0-w1 ═══════════
+   Source of truth: docs/12-week-concurrent-block.md
+   WAVE below is the SINGLE edit point for every load in the block.
+   Entry shapes:  { s, r, l, rl? }                      → s sets × r reps @ l
+                  { top:{s,r,l}, back:{s,r,l}, rl? }    → top set then back-offs
+                  null                                   → exercise off this week      */
+
+const BLOCK_VERSION = "v2.0-w1";
+// Stamped into every saved bundle. A bundle WITHOUT this id was written by the previous
+// program (Press-Priority v1.3) and its training data must not bleed into this block —
+// `mon/suitcase` and `fri/squat` are the same ids in both programs, so an old Friday
+// back-squat log would otherwise appear as this block's low-bar squat, and as "LAST WK".
+const PROGRAM_ID = "astra-concurrent-v2";
+// Provisional e1RMs from §5.4 (low-rep derived). Dip/pull-up are EXTERNAL load.
+const RM = { ohp: 129, bench: 220, squat: 265, dl: 500, dip: 85, pullup: 72 };
+const BW = 170; // bodyweight anchor for total-system-load readouts
+
 const WAVE = {
-  bench: { 1:[4,5,160], 2:[4,3,175], 3:[4,2,185], 4:[3,5,150], 5:[4,5,165], 6:[4,3,180], 7:[3,2,190], 8:[3,5,150], 9:[4,5,170], 10:[4,3,185], 11:[2,2,195], 12:[3,2,170] },
-  ohp:   { 1:[4,5,95],  2:[4,3,105], 3:[4,2,110], 4:[3,5,90],  5:[4,5,97.5],6:[4,3,107.5],7:[3,2,112.5],8:[3,5,90], 9:[4,5,100], 10:[4,3,110], 11:[2,2,115], 12:[3,2,100] },
-  squat: { 1:[3,5,215], 2:[3,4,220], 3:[3,3,225], 4:[2,5,195], 5:[4,5,215], 6:[4,4,220], 7:[4,3,225], 8:[2,5,195], 9:[5,4,215], 10:[5,3,220], 11:[5,2,225], 12:[2,3,195] },
-  dlH:   { 1:[2,2,425], 2:[2,2,425], 3:[2,2,425], 4:null, 5:[2,2,430], 6:[2,2,430], 7:[2,2,430], 8:null, 9:[2,2,435], 10:[2,2,435], 11:[2,2,435], 12:null },
-  dlV:   { 1:[3,3,390], 2:[3,3,390], 3:[3,3,390], 4:[2,3,360], 5:[3,3,395], 6:[3,3,395], 7:[3,3,395], 8:[2,3,360], 9:[3,3,400], 10:[3,3,400], 11:[3,3,400], 12:[2,3,360] },
+  /* ── Wednesday: strict OHP priority (block priority 1) ── */
+  ohp: {
+    1:  { top:null, back:{s:3,r:3,l:105}, calib:true },
+    2:  { top:{s:1,r:3,l:112.5}, back:{s:3,r:3,l:105} },
+    3:  { top:{s:1,r:3,l:112.5}, back:{s:3,r:3,l:105} },
+    4:  { top:{s:1,r:3,l:115},   back:{s:3,r:3,l:107.5} },
+    5:  { top:{s:1,r:3,l:115},   back:{s:3,r:3,l:107.5} },
+    6:  { top:{s:1,r:3,l:97.5},  back:{s:1,r:3,l:90} },
+    7:  { top:{s:1,r:2,l:120},   back:{s:3,r:2,l:110} },
+    8:  { top:{s:1,r:2,l:120},   back:{s:3,r:2,l:110} },
+    9:  { top:{s:1,r:2,l:122.5}, back:{s:3,r:2,l:112.5} },
+    10: { top:{s:1,r:2,l:122.5}, back:{s:3,r:2,l:112.5} },
+    11: { top:{s:1,r:2,l:125},   back:{s:3,r:2,l:115} },
+    12: null, // week-12 Wednesday is the test session
+  },
+  /* ── Monday: OHP technical exposure (3rd weekly exposure, first item cut) ── */
+  ohptech: {
+    1:{s:3,r:3,l:85}, 2:{s:3,r:3,l:90}, 3:{s:3,r:3,l:90}, 4:{s:3,r:3,l:92.5}, 5:{s:3,r:3,l:92.5},
+    6:null, 7:{s:2,r:3,l:95}, 8:{s:2,r:3,l:95}, 9:{s:2,r:3,l:97.5}, 10:{s:2,r:3,l:97.5},
+    11:{s:2,r:3,l:100}, 12:null,
+  },
+  /* ── Sunday: weighted dip, heavy (block priority 2) ── */
+  dip: {
+    1:  { top:{s:1,r:6,l:37.5}, back:{s:3,r:6,l:22.5} },
+    2:  { top:{s:1,r:6,l:40},   back:{s:3,r:6,l:25} },
+    3:  { top:{s:1,r:6,l:40},   back:{s:3,r:6,l:25} },
+    4:  { top:{s:1,r:6,l:42.5}, back:{s:3,r:6,l:27.5} },
+    5:  { top:{s:1,r:6,l:42.5}, back:{s:3,r:6,l:27.5} },
+    6:  { top:{s:1,r:5,l:25},   back:{s:1,r:5,l:15} },
+    7:  { top:{s:1,r:5,l:45},   back:{s:3,r:5,l:30} },
+    8:  { top:{s:1,r:5,l:45},   back:{s:3,r:5,l:30} },
+    9:  { top:{s:1,r:5,l:47.5}, back:{s:3,r:5,l:32.5} },
+    10: { top:{s:1,r:5,l:47.5}, back:{s:3,r:5,l:32.5} },
+    11: { top:{s:1,r:5,l:50},   back:{s:3,r:5,l:35} },
+    12: { s:2, r:4, l:20 }, // technique only
+  },
+  /* ── Friday: weighted dip, volume (antagonist-supersetted with pull-ups) ── */
+  dipvol: {
+    1:{s:3,r:7,l:17.5,rl:"6–8"}, 2:{s:3,r:7,l:20,rl:"6–8"}, 3:{s:3,r:7,l:20,rl:"6–8"},
+    4:{s:3,r:7,l:22.5,rl:"6–8"}, 5:{s:3,r:7,l:22.5,rl:"6–8"}, 6:{s:2,r:6,l:10},
+    7:{s:3,r:6,l:25}, 8:{s:3,r:6,l:25}, 9:{s:3,r:6,l:27.5}, 10:{s:3,r:6,l:27.5},
+    11:{s:3,r:6,l:30}, 12:{s:2,r:6,l:20},
+  },
+  /* ── Monday: weighted neutral-grip pull-up, heavy (block priority 3) ── */
+  pullup: {
+    1:  { top:{s:1,r:5,l:32.5}, back:{s:3,r:5,l:22.5} },
+    2:  { top:{s:1,r:5,l:35},   back:{s:3,r:5,l:25} },
+    3:  { top:{s:1,r:5,l:35},   back:{s:3,r:5,l:25} },
+    4:  { top:{s:1,r:5,l:37.5}, back:{s:3,r:5,l:27.5} },
+    5:  { top:{s:1,r:5,l:37.5}, back:{s:3,r:5,l:27.5} },
+    6:  { top:{s:1,r:4,l:20},   back:{s:1,r:4,l:12.5} },
+    7:  { top:{s:1,r:4,l:40},   back:{s:3,r:4,l:30} },
+    8:  { top:{s:1,r:4,l:40},   back:{s:3,r:4,l:30} },
+    9:  { top:{s:1,r:4,l:42.5}, back:{s:3,r:4,l:32.5} },
+    10: { top:{s:1,r:4,l:42.5}, back:{s:3,r:4,l:32.5} },
+    11: { top:{s:1,r:4,l:45},   back:{s:3,r:4,l:35} },
+    12: { s:2, r:4, l:20 }, // technique only
+  },
+  /* ── Wednesday: pull-up volume ── */
+  pullupvol: {
+    1:{s:4,r:5,l:17.5,rl:"5–6"}, 2:{s:4,r:5,l:20,rl:"5–6"}, 3:{s:4,r:5,l:20,rl:"5–6"},
+    4:{s:4,r:5,l:22.5,rl:"5–6"}, 5:{s:4,r:5,l:22.5,rl:"5–6"}, 6:{s:2,r:5,l:10},
+    7:{s:4,r:5,l:25}, 8:{s:4,r:5,l:25}, 9:{s:4,r:5,l:27.5}, 10:{s:4,r:5,l:27.5},
+    11:{s:4,r:5,l:30}, 12:null,
+  },
+  /* ── Friday: pull-up, supersetted into the dip rest ── */
+  pullupss: {
+    1:{s:2,r:6,l:10}, 2:{s:2,r:6,l:10}, 3:{s:2,r:6,l:10}, 4:{s:2,r:6,l:10}, 5:{s:2,r:6,l:10},
+    6:{s:1,r:6,l:0}, 7:{s:2,r:6,l:15}, 8:{s:2,r:6,l:15}, 9:{s:2,r:6,l:15}, 10:{s:2,r:6,l:15},
+    11:{s:2,r:6,l:15}, 12:null,
+  },
+  /* ── Sunday: paused bench (priority 5 — progresses only while OHP and dips are intact) ── */
+  bench: {
+    1:{s:3,r:3,l:180}, 2:{s:3,r:3,l:180}, 3:{s:3,r:3,l:185}, 4:{s:3,r:3,l:185},
+    5:{s:3,r:3,l:190}, 6:{s:2,r:3,l:155}, 7:{s:3,r:2,l:195}, 8:{s:3,r:2,l:195},
+    9:{s:3,r:2,l:200}, 10:{s:3,r:2,l:200}, 11:{s:3,r:2,l:205}, 12:{s:2,r:3,l:165},
+  },
+  /* ── Friday: low-bar squat (volume held low — Friday's elastic work outranks it) ── */
+  squat: {
+    1:{s:3,r:3,l:225}, 2:{s:3,r:3,l:225}, 3:{s:3,r:3,l:225}, 4:{s:3,r:3,l:230},
+    5:{s:3,r:3,l:230}, 6:{s:2,r:3,l:195}, 7:{s:3,r:2,l:235}, 8:{s:3,r:2,l:235},
+    9:{s:3,r:2,l:235}, 10:{s:3,r:2,l:240}, 11:{s:3,r:2,l:240}, 12:{s:2,r:3,l:185},
+  },
+  /* ── Monday: conventional deadlift — maintenance, fixed weekday, 12 exposures ── */
+  dl: {
+    1:{s:2,r:2,l:420}, 2:{s:2,r:2,l:435}, 3:{s:2,r:2,l:450}, 4:{s:3,r:2,l:420},
+    5:{s:2,r:2,l:450}, 6:{s:2,r:2,l:365}, 7:{s:2,r:2,l:430}, 8:{s:2,r:2,l:450},
+    9:{s:3,r:2,l:425}, 10:{s:2,r:2,l:455}, 11:{s:2,r:2,l:450}, 12:{s:2,r:2,l:365},
+  },
+  /* ── Wednesday: secondary pressing volume ── */
+  incline: {
+    1:{s:2,r:9,l:50,rl:"8–10"}, 2:{s:2,r:9,l:50,rl:"8–10"}, 3:{s:2,r:9,l:50,rl:"8–10"},
+    4:{s:2,r:9,l:50,rl:"8–10"}, 5:{s:2,r:9,l:55,rl:"8–10"}, 6:null,
+    7:{s:2,r:9,l:55,rl:"8–10"}, 8:{s:2,r:9,l:55,rl:"8–10"}, 9:{s:2,r:9,l:55,rl:"8–10"},
+    10:{s:2,r:9,l:60,rl:"8–10"}, 11:{s:2,r:9,l:60,rl:"8–10"}, 12:null,
+  },
 };
-const REDUCED = new Set([3,4,7,8,10,11,12]);
-const BADGE = { 3:"Protected", 4:"Deload", 7:"Protected", 8:"Deload", 10:"Protected", 11:"Protected · Peak", 12:"Taper", 13:"Test" };
-const BLOCK = (w) => (w === 13 ? "Test Week" : w <= 4 ? "Block 1 · Groove" : w <= 8 ? "Block 2 · Load" : "Block 3 · Peak");
-const INTENSITY = [74,81,86,70,77,84,88,70,79,86,91,79];
 
-/* Each alt is the single pattern-preserving substitute, vetted against the program's
-   philosophy stack: same movement pattern (Dan John), submaximal & RIR-governable (Pavel),
-   unilateral/core category preserved (Boyle/McGill), plyo dose & quality preserved (Verkhoshansky). */
+/* ── Copenhagen adduction ladder (§5.10). Lever length is the load variable and moves alone. ── */
+const COPEN = {
+  1:{lever:"Short lever · knee supported", s:3, r:6},  2:{lever:"Short lever · knee supported", s:3, r:7},
+  3:{lever:"Short lever · knee supported", s:3, r:8},  4:{lever:"Mid lever · support at mid-shin", s:3, r:6},
+  5:{lever:"Mid lever · support at mid-shin", s:3, r:7}, 6:{lever:"Short lever · deload", s:2, r:6},
+  7:{lever:"Mid lever · support at mid-shin", s:3, r:8}, 8:{lever:"Long lever · support at the ankle", s:3, r:6},
+  9:{lever:"Long lever · support at the ankle", s:3, r:7}, 10:{lever:"Long lever · support at the ankle", s:3, r:8},
+  11:{lever:"Long lever · support at the ankle", s:3, r:8}, 12:{lever:"Short lever · deload", s:2, r:6},
+};
+const COPEN_GATE = { 4:"Advance to mid lever only if weeks 1–3 adductor checks were all normal.", 8:"Advance to long lever only if weeks 4–7 adductor checks were all normal." };
+
+/* ── Plyometric contacts by tier and session (§5.8). Counted per limb on unilateral work. ── */
+const PLYO = {
+  1:  { mon:{t1:20}, wed:{t1:25,t2:12}, fri:{t1:25,t2:8,t3:0} },
+  2:  { mon:{t1:24}, wed:{t1:28,t2:15}, fri:{t1:28,t2:8,t3:0} },
+  3:  { mon:{t1:28}, wed:{t1:32,t2:18}, fri:{t1:32,t2:8,t3:0} },
+  4:  { mon:{t1:30}, wed:{t1:35,t2:21}, fri:{t1:35,t2:8,t3:0} },
+  5:  { mon:{t1:30}, wed:{t1:35,t2:21}, fri:{t1:35,t2:8,t3:20} },
+  6:  { mon:{t1:15}, wed:{t1:20},       fri:{t1:15} },
+  7:  { mon:{t1:28}, wed:{t1:35,t2:21}, fri:{t1:32,t2:8,t3:20} },
+  8:  { mon:{t1:30}, wed:{t1:35,t2:24}, fri:{t1:35,t2:9,t3:23} },
+  9:  { mon:{t1:30}, wed:{t1:40,t2:26}, fri:{t1:35,t2:10,t3:23} },
+  10: { mon:{t1:30}, wed:{t1:40,t2:29}, fri:{t1:35,t2:10,t3:26} },
+  11: { mon:{t1:30}, wed:{t1:40,t2:26}, fri:{t1:30,t2:10,t3:26} },
+  12: { mon:{t1:20}, wed:{},            fri:{t1:25} },
+};
+const TIER_NAME = { t1:"Tier 1 · low", t2:"Tier 2 · moderate", t3:"Tier 3 · high" };
+const TIER_EX = {
+  t1: "Pogo hops · ankle hops · line hops · A-skips · fast skips. Low amplitude, quiet contacts.",
+  t2: "Low hurdle hops 12in · submax broad jumps 75–80% · split jumps (wk4+) · single-leg hops in place (wk8+, count per limb) · low-amplitude A-bounds (wk9+).",
+  t3: "Depth jump — step off, land tall, one clean contact, step down from the box.",
+};
+/* Tier 3 changes ONE variable per step (§5.8). */
+const TIER3_RX = {
+  5:"Depth jump 12 in · 5 × 4", 7:"Depth jump 12 in · 5 × 4 (restore)", 8:"Depth jump 12 in · 5 × 4 + 1 × 3",
+  9:"Depth jump 15 in · 5 × 4 + 1 × 3 (height only)", 10:"Depth jump 15 in · 6 × 4 + 1 × 2 (volume only)",
+  11:"Depth jump 15 in · 5 × 4, then 6 maximal broad jumps in the test format",
+};
+const FRI_SEQUENCE = [
+  "Adductor isometric squeeze 3 × 20 s",
+  "Tier 1 ramp",
+  "Tier 2 — opening block",
+  "Tier 3 (from week 5)",
+  "Acceleration reps — next card",
+  "Tier 2 — closing block",
+];
+
+/* ── Running and acceleration ladder (§5.9). Ceiling: 250 m of quality volume per session. ── */
+const SPRINT = {
+  1:  { surface:"Hill ~5%", reps:4, dist:15, label:"4 × 15 m", intensity:"Build, not maximal", rest:150, m:60 },
+  2:  { surface:"Hill ~5%", reps:5, dist:15, label:"5 × 15 m", intensity:"Build", rest:150, m:75 },
+  3:  { surface:"Hill ~5%", reps:6, dist:15, label:"6 × 15 m", intensity:"Build", rest:150, m:90 },
+  4:  { surface:"Hill ~5%", reps:6, dist:20, label:"6 × 20 m", intensity:"Build", rest:150, m:120 },
+  5:  { surface:"Hill ~5%", reps:6, dist:25, label:"6 × 25 m", intensity:"Build", rest:210, m:150 },
+  6:  { surface:"Hill ~5%", reps:3, dist:15, label:"3 × 15 m", intensity:"Submaximal — technique only", rest:180, m:45 },
+  7:  { surface:"Flat, then hill", reps:8, dist:20, label:"4 × 20 m flat + 4 × 20 m hill", intensity:"Flat builds to 80%", rest:150, m:160 },
+  8:  { surface:"Flat", reps:5, dist:25, label:"5 × 25 m", intensity:"85%", rest:210, m:125 },
+  9:  { surface:"Flat", reps:5, dist:30, label:"5 × 30 m", intensity:"85–90%", rest:210, m:150 },
+  10: { surface:"Flat", reps:6, dist:30, label:"6 × 30 m", intensity:"90%", rest:210, m:180 },
+  11: { surface:"Flat", reps:7, dist:30, label:"5 × 30 m + 2 × 40 m", intensity:"90–95%", rest:210, m:230 },
+  12: { surface:"Flat", reps:2, dist:30, label:"2 × 30 m", intensity:"Submaximal", rest:180, m:60 },
+};
+const SPRINT_CEILING = 250;
+
+const REDUCED = new Set([6, 12]);
+const BADGE = { 1:"Calibration", 5:"Tier 3 enters", 6:"Deload", 7:"Flat sprints enter", 11:"Peak · rehearsal", 12:"Deload · Test" };
+const PHASE = (w) => (w === 1 ? "Calibration" : w === 6 ? "Deload" : w === 12 ? "Deload + Test" : w <= 5 ? "Accumulation" : "Intensification");
+const INTENSITY = [72, 78, 82, 85, 88, 60, 84, 88, 91, 93, 95, 62];
+/* Phase RIR floor — a set below this is flagged (§5.12 effort rules). */
+const RIR_FLOOR = (w) => (w === 6 || w === 12 ? 4 : w <= 5 ? 2 : 1);
+const TARGET_RIR = (w) => (w === 6 || w === 12 ? "4+" : w <= 5 ? "2–3" : "1–2");
+
+const CUT_LABEL = { never:"never-cut", second:"cut-2nd", first:"cut-1st" };
+
 const DAYS = [
-  { id:"mon", lift:"Bench", exercises:[
-    { id:"plyopush", name:"Plyo Push-Up", tag:"primer", sets:3, reps:"3", load:"BW", unit:"reps", cue:"Full reset per rep. Land quiet and stiff.", alt:"Med-Ball Chest Pass" },
-    { id:"bench", name:"Bench Press", tag:"main lift", wave:"bench", rm:"bench", unit:"reps", cue:"CAT — every rep a max-intent launch. Two slow reps end the set.", alt:"DB Bench Press" },
-    { id:"wpu", name:"Weighted Pull-Up", tag:"superset", sets:4, reps:"5", load:"+25 lb", loadNum:25, unit:"reps", cue:"One set into each bench rest. Dead-hang start.", alt:"Heavy Lat Pulldown" },
-    { id:"kbpress", name:"1-Arm KB Press", tag:"press", sets:3, reps:"5/side", load:"20–24 kg", unit:"per side", cue:"Standing. Glutes locked, crush the handle.", alt:"1-Arm DB Press" },
-    { id:"dips", name:"Weighted Dips", tag:"press", sets:3, reps:"6", load:"+30 lb", loadNum:30, unit:"reps", cue:"Smooth depth, zero bounce.", alt:"Close-Grip Bench Press" },
-    { id:"dbrow", name:"1-Arm DB Row", tag:"row", sets:3, reps:"8/side", load:"", unit:"per side", cue:"Brace; no torso rotation.", alt:"1-Arm Chest-Supported Row" },
-    { id:"suitcase", name:"Suitcase Carry", tag:"carry", sets:3, reps:"40/side", load:"", unit:"yd", cue:"Tall, level hips. Runs as circuit with rollouts.", alt:"Offset Front-Rack Carry" },
-    { id:"abwheel", name:"Ab-Wheel Rollout", tag:"core", sets:3, reps:"8", load:"BW", unit:"reps", cue:"Ribs down, no lumbar sag.", alt:"Body-Saw" },
+  { id:"sun", lift:"Dip", title:"Pressing volume & horizontal pull", budget:{ warm:14, pri:34, acc:16, fin:6 },
+    objective:"Deliver the week's largest pressing dose on the one day where prior cycling cannot reach the working muscles.",
+    exercises:[
+    { id:"primer", kind:"primer", name:"DFW Primer", tag:"primer", cut:"first", rounds:3, press:true,
+      cue:"Three rounds on a 60-second clock. Press component retained — today's priority is a dip, not an overhead press.", alt:null },
+    { id:"dip", kind:"main", wave:"dip", rm:"dip", plus:true, name:"Weighted Dip", tag:"main lift", cut:"never", unit:"reps",
+      ramp:[["BW",8],[15,5],[25,3]],
+      cue:"Fresh slot. Deep ROM below 90° at the elbow, controlled lockout. The heavy outcome is a clean set with reserve — never a max attempt.", alt:"Close-Grip Bench Press" },
+    { id:"bench", kind:"main", wave:"bench", rm:"bench", bar:true, name:"Paused Bench Press", tag:"press", cut:"second", unit:"reps",
+      cue:"Full stop, bar motionless on the chest. Identical setup every week. Progresses only while OHP and dips are intact.", alt:"Close-Grip Bench Press" },
+    { id:"row1", name:"Chest-Supported Row", tag:"row", cut:"second", sets:3, reps:"8–10", load:"select for 2 RIR", unit:"reps",
+      cue:"Half the week's horizontal pulling floor. Chest stays on the pad — no body english.", alt:"T-Bar Row" },
+    { id:"revflye", name:"DB Reverse Flye", tag:"shoulder health", cut:"never", sets:2, reps:"12–15", load:"15–20 lb", loadNum:17.5, unit:"reps", keepOnDeload:true,
+      cue:"Shoulder-health floor, session 1 of 4. Low load, 0–1 RIR. Last item cut in this session.", alt:"Rope Face Pull" },
+    { id:"lat1", name:"DB Lateral Raise", tag:"delt", cut:"first", sets:2, reps:"12–15", load:"15–20 lb", loadNum:17.5, unit:"reps",
+      cue:"Direct delt work. Flexible floor — first item cut when time runs short.", alt:"Cable Lateral Raise" },
+    { id:"abwheel", name:"Ab-Wheel Rollout", tag:"core", cut:"second", sets:2, reps:"8–10", load:"BW", unit:"reps",
+      cue:"Direct abdominal session 1 of 3. Ribs down, no lumbar sag.", alt:"Hanging Leg Raise" },
+    { id:"farmer", name:"Farmer Carry", tag:"carry", cut:"second", sets:2, reps:"40", load:"2 × 32 kg", unit:"m",
+      cue:"Carry exposure 1 of 2. Tall posture, crush the handles.", alt:"Heavy DB Carry" },
   ]},
-  { id:"tue", lift:"Deadlift", exercises:[
-    { id:"boxjump", name:"Box Jump", tag:"primer", sets:3, reps:"3", load:"BW", unit:"reps", cue:"Stick every landing. Step down, never rebound.", alt:"Vertical Jump (Stick Landing)" },
-    { id:"dlh", name:"Deadlift — Heavy", tag:"main lift", wave:"dlH", rm:"dl", unit:"reps", cue:"Dead-stop, full reset. Should look easy on video.", alt:"Trap-Bar Deadlift" },
-    { id:"dlv", name:"Deadlift — Volume", tag:"main lift", wave:"dlV", rm:"dl", unit:"reps", cue:"Dead-stop triples. Kill any rep that slows.", alt:"Trap-Bar Deadlift" },
-    { id:"snatch", name:"Hardstyle KB Snatch", tag:"ballistic", sets:4, reps:"5/side", load:"20–24 kg", unit:"per side", cue:"Tame the arc, punch through at lockout.", alt:"1-Arm KB Swing" },
-    { id:"rfess", name:"Rear-Foot-Elevated Split Squat", tag:"unilateral", sets:3, reps:"8/side", load:"", unit:"per side", cue:"Vertical shin bias — quads, not hips.", alt:"Goblet Split Squat" },
-    { id:"mbtoss", name:"Med-Ball Rotational Toss", tag:"rotation", sets:2, reps:"6/side", load:"light", unit:"per side", cue:"Hips lead, arms follow.", alt:"Cable Rotation (Light)" },
-    { id:"farmer", name:"Farmer Carry", tag:"carry", sets:3, reps:"40", load:"", unit:"yd", cue:"Tall posture, quick steps, crush grip.", alt:"Heavy DB Carry" },
-    { id:"pallof", name:"Pallof Press", tag:"core", sets:3, reps:"10/side", load:"", unit:"per side", cue:"Ribs stacked, slow press-outs.", alt:"Band Anti-Rotation Press" },
-  ]},
-  { id:"thu", lift:"OHP", exercises:[
-    { id:"plyopush2", name:"Plyo Push-Up", tag:"primer", sets:3, reps:"3", load:"BW", unit:"reps", cue:"Same dose as Monday — never more.", alt:"Med-Ball Chest Pass" },
-    { id:"ohp", name:"Strict OHP", tag:"main lift", wave:"ohp", rm:"ohp", unit:"reps", cue:"Wedge under it, punch the ceiling. CAT.", alt:"Standing DB Press" },
-    { id:"chins", name:"Weighted Chin-Up", tag:"superset", sets:4, reps:"5", load:"+25 lb", loadNum:25, unit:"reps", cue:"One set into each OHP rest. Sternum to bar.", alt:"Underhand Lat Pulldown" },
-    { id:"incline", name:"Incline DB Press", tag:"press", sets:3, reps:"8", load:"~60 lb DBs", loadNum:60, unit:"reps", cue:"Full stretch, hard lockout.", alt:"Landmine Press" },
-    { id:"dips2", name:"Weighted Dips", tag:"press", sets:3, reps:"6", load:"+30 lb", loadNum:30, unit:"reps", cue:"Yields only to a real shoulder signal.", alt:"Close-Grip Bench Press" },
-    { id:"gorilla", name:"Gorilla Row", tag:"row", sets:3, reps:"8/side", load:"", unit:"per side", cue:"Set the hinge, row with zero twist.", alt:"1-Arm Chest-Supported Row" },
-    { id:"suitcase2", name:"Suitcase Carry", tag:"carry", sets:3, reps:"40/side", load:"", unit:"yd", cue:"Anti-lateral slot #2.", alt:"Offset Front-Rack Carry" },
-    { id:"hollow", name:"Hollow-Body Hold", tag:"core", sets:3, reps:"20–30", load:"BW", unit:"sec", cue:"Low back glued down.", alt:"Dead Bug" },
-  ]},
-  { id:"fri", lift:"Squat", exercises:[
-    { id:"broad", name:"Broad Jump", tag:"primer", sets:3, reps:"3", load:"BW", unit:"reps", cue:"Land balanced, hold one full second.", alt:"Box Jump" },
-    { id:"squat", name:"Back Squat", tag:"main lift", wave:"squat", rm:"squat", unit:"reps", cue:"Never above 225. Drive out of the hole with intent.", alt:"Front Squat (about −20%)" },
-    { id:"swings", name:"Hardstyle KB Swings", tag:"ballistic", sets:4, reps:"10", load:"28–32 kg", unit:"reps", cue:"The week's pure swing dose. Frozen all cycle.", alt:"DB Swing" },
-    { id:"slrdl", name:"Single-Leg RDL", tag:"unilateral", sets:3, reps:"8/side", load:"", unit:"per side", cue:"Square hips, long spine.", alt:"B-Stance RDL" },
-    { id:"kbchop", name:"Half-Kneeling KB Chop", tag:"rotation", sets:2, reps:"8/side", load:"12–16 kg", unit:"per side", cue:"Budgeted against the serve. Smooth.", alt:"Cable Chop" },
-    { id:"farmer2", name:"Farmer Carry", tag:"carry", sets:3, reps:"40", load:"", unit:"yd", cue:"Finish tall.", alt:"Heavy DB Carry" },
-    { id:"bodysaw", name:"Body-Saw", tag:"core", sets:3, reps:"8", load:"BW", unit:"reps", cue:"Small range, iron trunk.", alt:"Dead Bug" },
-  ]},
-];
-const EX_INDEX = {};
-DAYS.forEach(d => d.exercises.forEach(ex => { EX_INDEX[ex.id] = ex; }));
 
-const REST = {
-  plyopush:75, bench:180, wpu:null, kbpress:120, dips:120, dbrow:75, suitcase:60, abwheel:60,
-  boxjump:75, dlh:180, dlv:150, snatch:75, rfess:75, mbtoss:60, farmer:60, pallof:45,
-  plyopush2:75, ohp:180, chins:null, incline:120, dips2:120, gorilla:75, suitcase2:60, hollow:45,
-  broad:75, squat:180, swings:75, slrdl:75, kbchop:60, farmer2:60, bodysaw:45,
-};
-const WARMUP_MENU = {
-  mon: ["Band pull-aparts ×15–20","Shoulder CARs ×5/side","Scap push-ups ×10","Light DB press ×10","Empty-bar bench ×10, then the ladder"],
-  tue: ["Cat-camel ×8","Glute bridge ×10","Dowel hip-hinge drill ×10","Bird dog ×5/side","Light KB swings ×10"],
-  thu: ["Band dislocates ×10","Band external rotations ×12/side","Wall slides ×8","Scap pull-ups ×8","Empty-bar press ×10, then the ladder"],
-  fri: ["Ankle rocks ×10/side","90/90 hip switches ×6/side","Bodyweight squats ×10","Goblet squat hold 30 s","Empty-bar squats ×8, then the ladder"],
-};
-const TESTS = [
-  { id:"benchtest", tab:"WED", lift:"Bench Test", note:"3–4 easy days first. Crisp singles only — advance while fast, hard stop at RPE 9.5.",
-    attempts:[[45,5],[135,5],[160,3],[185,1],[200,1],[210,1],[220,1],[225,1]], rmKey:"bench" },
-  { id:"ohptest", tab:"FRI", lift:"OHP Test", note:"48 h after bench — fresh CNS for the lift where 2.5 lb is a whole increment. Same RPE 9.5 gate.",
-    attempts:[[45,8],[65,5],[85,3],[100,1],[110,1],[120,1],[127.5,1],[130,1]], rmKey:"ohp" },
+  { id:"mon", lift:"Deadlift", title:"Deadlift & vertical pull", budget:{ warm:14, pri:38, acc:16, fin:5 },
+    objective:"One clean heavy conventional pull and the week's heaviest loaded pull-up, with enough grip recovery between them.",
+    exercises:[
+    { id:"elastic", kind:"elastic", name:"Elastic Block", tag:"plyometric", cut:"never",
+      cue:"Tier 1 only, ~6 min, before the warm-up. Monday is ~30 h after the long ride and cannot produce quality elastic output — this is tissue conditioning. Stop if contact time visibly lengthens." },
+    { id:"primer", kind:"primer", name:"DFW Primer", tag:"primer", cut:"first", rounds:3, press:true,
+      cue:"Full three rounds. The front squats are trivial by design and do not count toward the lower-body audit." },
+    { id:"dl", kind:"main", wave:"dl", rm:"dl", bar:true, name:"Conventional Deadlift", tag:"main lift", cut:"never", unit:"reps",
+      cue:"Fresh slot. Crisp singles or doubles at RPE 7–8, never ground. Hook or alternating mixed grip — no straps. Stop the set on the first slow rep.", alt:"Trap-Bar Deadlift" },
+    { id:"pullup", kind:"main", wave:"pullup", rm:"pullup", plus:true, name:"Weighted NG Pull-Up", tag:"main lift", cut:"never", unit:"reps",
+      ramp:[["BW",5],[15,3]],
+      cue:"Standardised for the whole block: parallel neutral handles at shoulder width, full dead hang, collarbone level with the bar, belt in the same position.", alt:"Neutral-Grip Lat Pulldown" },
+    { id:"ohptech", kind:"main", wave:"ohptech", rm:"ohp", bar:true, ramp:[[45,6],[65,3]], name:"Strict OHP — Technical", tag:"press", cut:"first", unit:"reps",
+      cue:"Third weekly OHP exposure at a load that costs nothing. Rehearse the settled start. FIRST item cut under any fatigue adjustment.", alt:"Pin Press (approved trigger only)" },
+    { id:"copen", kind:"copen", name:"Copenhagen Adduction", tag:"prophylactic", cut:"never", unit:"per side", keepOnDeload:true,
+      cue:"Mandatory hard floor, twice weekly. Hips driven up until the body is straight, lowered under control. Counts toward the unilateral lower-body floor." },
+    { id:"extrot", name:"Band External Rotation", tag:"shoulder health", cut:"never", sets:2, reps:"12–15", load:"light", unit:"reps", keepOnDeload:true,
+      cue:"Shoulder-health floor, session 2 of 4. Elbow pinned to the ribs, slow return.", alt:"Cable External Rotation" },
+    { id:"lat2", name:"DB Lateral Raise", tag:"delt", cut:"first", sets:1, reps:"15", load:"15 lb", loadNum:15, unit:"reps",
+      cue:"Direct delt work, supersetted into the rotation rest.", alt:"Cable Lateral Raise" },
+    { id:"suitcase", name:"Suitcase Carry", tag:"carry", cut:"second", sets:2, reps:"40", load:"40 kg", unit:"m/side",
+      cue:"Carry exposure 2 of 2 and the week's anti-lateral-flexion exposure. Level hips.", alt:"Offset Front-Rack Carry" },
+    { id:"addcheck", kind:"check", name:"Adductor Check", tag:"gate", cut:"never",
+      cue:"Run after the session and again the following morning. Normal means no new sensation beyond familiar post-training soreness." },
+  ]},
+
+  { id:"wed", lift:"OHP", title:"Overhead press priority", budget:{ warm:14, pri:38, acc:16, fin:5 },
+    objective:"Put the block's first-priority lift in the freshest slot of the freshest upper-body day, with nothing ahead of it that costs the shoulder.",
+    exercises:[
+    { id:"elastic", kind:"elastic", name:"Elastic Block", tag:"plyometric", cut:"never",
+      cue:"Tiers 1 then 2, ~14 min, before the warm-up. Bilateral before unilateral, low amplitude before high intensity." },
+    { id:"primer", kind:"primer", name:"DFW Primer — reduced", tag:"primer", cut:"first", rounds:2, press:false,
+      cue:"OHP-priority day: two rounds, press component DROPPED, so the day's top lift is not pre-fatigued. Omit entirely if the first OHP ramp set feels heavier than last week." },
+    { id:"ohp", kind:"main", wave:"ohp", rm:"ohp", bar:true, name:"Strict OHP", tag:"main lift", cut:"never", unit:"reps",
+      cue:"Fresh slot, block priority 1. No knee dip, hip drive, rebound, or push-press initiation. Locked knees, controlled settled start, repeatable finish.", alt:"Pin Press (approved trigger only)" },
+    { id:"pullupvol", kind:"main", wave:"pullupvol", rm:"pullup", plus:true, name:"Weighted NG Pull-Up — Volume", tag:"main lift", cut:"never", unit:"reps",
+      ramp:[["BW",5]],
+      cue:"Volume exposure at a load that leaves Monday's heavy session intact. Same standard: dead hang, collarbone to bar.", alt:"Neutral-Grip Lat Pulldown" },
+    { id:"row2", name:"Chest-Supported Row", tag:"row", cut:"second", sets:3, reps:"8–10", load:"select for 2 RIR", unit:"reps",
+      cue:"Second half of the horizontal pulling floor.", alt:"Seal Row" },
+    { id:"ohshrug", name:"Barbell Overhead Shrug", tag:"shoulder health", cut:"never", sets:2, reps:"10–12", load:"65–95 lb", loadNum:75, unit:"reps", keepOnDeload:true,
+      cue:"Scapular upward rotation. Shoulder-health floor, session 3 of 4.", alt:"Wall Slide with Lift-Off" },
+    { id:"incline", kind:"main", wave:"incline", name:"Incline DB Press", tag:"press", cut:"first", unit:"reps",
+      cue:"Secondary pressing volume toward the 16–20 floor. Second item in the design-time cut order.", alt:"Landmine Press" },
+    { id:"lat3", name:"DB Lateral Raise", tag:"delt", cut:"first", sets:1, reps:"15", load:"15 lb", loadNum:15, unit:"reps",
+      cue:"Direct delt work, supersetted.", alt:"Cable Lateral Raise" },
+    { id:"hlr", name:"Hanging Leg Raise", tag:"core", cut:"second", sets:2, reps:"10–12", load:"BW", unit:"reps",
+      cue:"Direct abdominal session 2 of 3. No swing.", alt:"Ab-Wheel Rollout" },
+    { id:"addcheck", kind:"check", name:"Adductor Check", tag:"gate", cut:"never",
+      cue:"Run after the session and again the following morning." },
+  ]},
+
+  { id:"fri", lift:"Squat", title:"Squat & dip volume", budget:{ warm:14, pri:38, acc:16, fin:5 },
+    objective:"Concentrate every high-quality lower-body demand of the week into one day, in descending order of neural cost, then take the squat afterwards.",
+    exercises:[
+    { id:"elastic", kind:"elastic", name:"Elastic Block", tag:"plyometric", cut:"never",
+      cue:"The freshest lower-body day of the week carries the highest-quality elastic work. Follow the sequence exactly — tier 3 sits ahead of the sprints because depth jumps cost little, while a sprint rep on legs that already took 40 moderate contacts is the higher-risk arrangement." },
+    { id:"sprint", kind:"sprint", name:"Acceleration", tag:"acceleration", cut:"never",
+      cue:"Quality collapses before you notice it. TWO stop rules, either ends the session: the first rep that feels laboured out of the first three steps, or any rep obviously slower than the one before it." },
+    { id:"squat", kind:"main", wave:"squat", rm:"squat", bar:true, name:"Low-Bar Back Squat", tag:"main lift", cut:"never", unit:"reps",
+      cue:"Fresh slot of the strength session. At or below parallel every rep — depth consistency matters more than load in this block. Volume stays low by design.", alt:"Front Squat (about −20%)" },
+    { id:"dipvol", kind:"main", wave:"dipvol", rm:"dip", plus:true, name:"Weighted Dip — Volume", tag:"press", cut:"never", unit:"reps",
+      ramp:[["BW",8],[15,5]],
+      cue:"Second dip exposure of the week, submaximal. Antagonist-supersetted with the pull-ups below — that pairing is this session's time budget.", alt:"Close-Grip Bench Press" },
+    { id:"pullupss", kind:"main", wave:"pullupss", rm:"pullup", plus:true, name:"NG Pull-Up — Superset", tag:"superset", cut:"never", unit:"reps",
+      cue:"Rides inside the dip rest. Third vertical-pull exposure; keeps the press-to-pull ratio comfortable.", alt:"Neutral-Grip Lat Pulldown" },
+    { id:"copen", kind:"copen", name:"Copenhagen Adduction", tag:"prophylactic", cut:"never", unit:"per side", keepOnDeload:true,
+      cue:"Second mandatory session. Hard floor — never removed." },
+    { id:"facepull", name:"Rope Face Pull", tag:"shoulder health", cut:"never", sets:2, reps:"12–15", load:"light", unit:"reps", keepOnDeload:true,
+      cue:"Shoulder-health floor, session 4 of 4. High elbows, pull to the forehead.", alt:"Prone Y and T" },
+    { id:"curl", name:"EZ-Bar Curl", tag:"arm", cut:"first", sets:2, reps:"10–12", load:"select for 1 RIR", unit:"reps",
+      cue:"Direct arm work; flexible floor.", alt:"DB Hammer Curl" },
+    { id:"tri", name:"Overhead Rope Triceps Extension", tag:"arm", cut:"first", sets:2, reps:"10–12", load:"select for 1 RIR", unit:"reps",
+      cue:"Direct arm work; flexible floor. Cut with the curls.", alt:"Triceps Pushdown" },
+    { id:"pallof", name:"Pallof Press", tag:"core", cut:"second", sets:2, reps:"10", load:"light", unit:"per side",
+      cue:"Direct abdominal session 3 of 3 and the week's anti-rotation exposure. Ribs stacked, slow press-outs.", alt:"Band Anti-Rotation Press" },
+    { id:"addcheck", kind:"check", name:"Adductor Check", tag:"gate", cut:"never",
+      cue:"Run after the session and again the following morning. This is the gate on every running and tier progression." },
+  ]},
 ];
+
+const EX_INDEX = {};
+DAYS.forEach(d => d.exercises.forEach(ex => { EX_INDEX[`${d.id}-${ex.id}`] = ex; }));
+
+/* Rest in seconds. null = rests inside another lift's rest (supersetted). */
+const REST = {
+  "sun-dip":240, "sun-bench":180, "sun-row1":75, "sun-revflye":null, "sun-lat1":null, "sun-abwheel":45, "sun-farmer":60,
+  "mon-dl":300, "mon-pullup":180, "mon-ohptech":90, "mon-copen":null, "mon-extrot":null, "mon-lat2":null, "mon-suitcase":60,
+  "wed-ohp":210, "wed-pullupvol":180, "wed-row2":75, "wed-ohshrug":null, "wed-incline":90, "wed-lat3":null, "wed-hlr":45,
+  "fri-squat":240, "fri-dipvol":150, "fri-pullupss":null, "fri-copen":60, "fri-facepull":null, "fri-curl":60, "fri-tri":null, "fri-pallof":45,
+};
+
+const WARMUP_MENU = {
+  sun: ["Reason: 2–3 h in a flexed riding position leaves the hip flexors short and thoracic extension poor — the dip support position demands the opposite.",
+        "90/90 hip switch ×6/side", "Half-kneeling hip-flexor stretch with posterior tilt ×30 s/side",
+        "Thoracic extension over foam roller ×8 breaths", "Band pull-apart ×15", "Dip-bar support hold, scapulae depressed ×3 × 10 s"],
+  mon: ["Reason: first hip hinge after a long ride and a pressing session — adductors and hamstrings need graded exposure before a 400+ lb pull.",
+        "Adductor rock-back ×8/side", "Leg swing sagittal ×10/side, then frontal ×10/side",
+        "Kettlebell deadlift 24 kg ×8", "Dead hang ×20 s", "Scapular pull-up ×8"],
+  wed: ["Reason: the OHP limitation sits between chest and forehead — a mid-range force problem. The ramp must arrive there with the scapulae already upwardly rotated.",
+        "Wall slide with lift-off ×8", "Band pull-apart ×15",
+        "Half-kneeling bottoms-up KB press 8 kg ×5/side", "Thoracic extension over foam roller ×8 breaths"],
+  fri: ["Reason: the elastic and sprint block already raised tissue temperature and neural drive — this only has to buy squat-specific range. Long femurs make ankle range the limiter, not the hip.",
+        "Adductor rock-back ×8/side", "Ankle dorsiflexion wall mobilisation ×8/side",
+        "Goblet squat 16 kg ×6", "Band pull-apart ×15"],
+};
+
+/* Week-12 Wednesday test session (§5.13). Order: power before strength, priority before secondary. */
+const TESTS = [
+  { id:"broad", lift:"Standing Broad Jump", rmKey:"broad", unit:"in", minutes:12,
+    note:"3 build-up jumps at rising effort, then 3 measured attempts with full recovery. Same footwear and surface as week 1. Static two-foot start with arm swing; measure to the rearmost heel. Best of three.",
+    attempts:[["build",1],["build",1],["build",1],["max",1],["max",1],["max",1]], target:"Week-1 baseline + 4 in" },
+  { id:"ohptest", lift:"Strict OHP", rmKey:"ohp", unit:"reps", minutes:16,
+    note:"Ramp, then one attempt at the standard. Stop on the first grindy rep — a grindy single is not a valid result, it is a miss.",
+    attempts:[[45,6],[75,4],[95,3],[105,2],[115,1],[125,2]], target:"125 × 2 at ≤2 RIR" },
+  { id:"diptest", lift:"Weighted Dip", rmKey:"dip", unit:"reps", minutes:12,
+    note:"A rep that does not reach below 90° at the elbow is not counted.",
+    attempts:[["BW",8],[20,5],[35,3],[50,6]], target:"+50 × 6 at ≤2 RIR" },
+  { id:"putest", lift:"Weighted NG Pull-Up", rmKey:"pullup", unit:"reps", minutes:12,
+    note:"Full dead hang start, collarbone level with the bar. Anything less is not counted.",
+    attempts:[["BW",5],[20,3],[45,5]], target:"+45 × 5 at ≤2 RIR" },
+];
+const TEST_WEEK = 12, TEST_DAY = "wed";
+const isTestSession = (w, d) => w === TEST_WEEK && d === TEST_DAY;
+
 const WEEKDAYS = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
 
+/* Cycling placement — recommendations only. Ride content is never prescribed (§4 scope). */
+const RIDE_NOTE = {
+  sun: "AM: TrainerRoad long ride, ≥6 h before this session. If it overruns and the gap falls under 6 h the session still runs — apply the cut order and protect the fresh slot.",
+  mon: "No ride today.",
+  wed: "Tuesday's ride was ~34 h ago. No ride today.",
+  fri: "Optional fourth ride goes AFTER this session, ≥4 h later, easy. It is the first thing removed when Friday sprint quality or squat bar speed declines.",
+};
+
 function sessionFocus(week, dayId) {
-  if (week === 4 || week === 8) return "Deload week — ~70% mains, 2-set accessories, everything RIR 3–4. The deload is the program.";
-  if (week === 12) return "Taper — short and crisp. Nothing new, nothing beyond the sheet. Test week is next.";
-  const peak = { 3:"Doubles week: every double fast or the −5 lb rule fires.", 7:"Densest week of the cycle — bar speed is the referee.", 10:"Heavy triples, protected week — accessories at the 2-set floor.", 11:"Peak doubles: 2 crisp sets, done. Everything else at the floor." }[week];
+  if (week === 6) return "Deload. Everything at 4 RIR or easier, roughly half the sets, low-tier plyometrics only. Volume floors are waived this week by design — the deload is the program.";
+  if (week === 12) return "Deload and test week. Technique only at 4 RIR or easier, no novel exercises. Wednesday is the test session.";
+  const wk = {
+    1:"Calibration week. Wednesday ramps to a single at RPE 7.5–8.5; Friday takes the broad-jump baseline. Everything else is a normal training week.",
+    5:"Tier 3 enters on Friday — depth jumps from 12 in. It is the only new variable this week, so tiers 1 and 2 hold at week-4 volume.",
+    7:"Intensification begins. Threes become twos on OHP, bench, and squat. First flat sprint exposure on Friday. Every elastic tier returns to a volume already tolerated.",
+    8:"Copenhagen advances to the long lever — the largest single jump in the adductor progression.",
+    11:"Peak. Every test load is rehearsed this week: OHP Wednesday, dip Sunday, pull-up Monday, maximal broad jumps Friday.",
+  }[week];
   const base = {
-    mon: "Bench wave leads. Pull-ups ride the bench rests — the superset is mandatory.",
-    tue: "Heavy 2×2 first while fresh. Every pull dead-stop; kill any slow rep.",
-    thu: "OHP wave leads. Chins ride the press rests. Dips yield only to a real shoulder signal.",
-    fri: "Squat capped at 225. Tomorrow's tennis gets fresh legs — nothing extra today.",
+    sun:"Post-ride day. Dip leads in the fresh slot; bench is secondary and yields first. No elastic work today — it follows a hard ride.",
+    mon:"Deadlift is a maintenance exposure, not a target. Pull-up is the priority lift here; the OHP technical set is the first thing cut.",
+    wed:"OHP owns the fresh slot. Nothing goes ahead of it. Incline press and lateral raises yield before anything else.",
+    fri:"Elastic and sprints come first and get the fresh legs. Squat takes what is left — that ordering is deliberate and is not negotiable.",
   }[dayId];
-  return peak ? `${peak} ${base}` : base;
+  return wk ? `${wk} ${base}` : base;
 }
 
 /* ═══════════ THEMES ═══════════ */
@@ -142,6 +415,10 @@ function playTone(ctx, tone) {
 /* ═══════════ HELPERS ═══════════ */
 const fmtTime = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 const roundTo = (x, step) => Math.round(x/step)*step;
+const fmtLb = (n) => (n == null ? "" : String(Math.round(n * 10) / 10));
+
+// Barbell ramp. Dips and pull-ups carry an explicit `ramp` on the exercise instead,
+// because their ladder is bodyweight-relative and does not scale off a percentage.
 function generateWarmups(load, rmKey) {
   const isDl = rmKey === "dl", isOhp = rmKey === "ohp";
   const base = isDl ? 135 : 45, step = isOhp ? 2.5 : 5;
@@ -157,24 +434,91 @@ function plateMath(total) {
   for (const p of [45,25,10,5,2.5,1.25]) { while (per >= p - 0.001) { out.push(p); per -= p; } }
   return out.length ? out.join(" · ") + " / side" : "empty bar";
 }
+
+/* getRx returns, for a given exercise and week:
+     sets / repsLabel / repsNum / loadLabel / loadNum   — the headline prescription
+     rows[]                                             — PER-SET targets, so a top set and its
+                                                           back-offs live on one card (the block
+                                                           prescribes both together)
+     warmups / plates / pct / system                    — ramp, plate math, %e1RM, total system load
+   Returns null when the exercise is off that week. */
 function getRx(ex, week) {
+  if (ex.kind === "copen") {
+    const c = COPEN[week];
+    if (!c) return null;
+    return { sets:c.s, repsLabel:`${c.r}/side`, repsNum:c.r, loadLabel:c.lever, loadNum:null, pct:null,
+             warmups:null, plates:null, rows:Array.from({length:c.s}, () => ({ w:null, r:c.r })), gate:COPEN_GATE[week] || null };
+  }
   if (ex.wave) {
     const w = WAVE[ex.wave][week];
     if (!w) return null;
-    const [sets, reps, load] = w;
-    const needsWarmup = ex.wave !== "dlV" || !WAVE.dlH[week];
-    return { sets, repsLabel:String(reps), repsNum:reps, loadLabel:`${load} lb`, loadNum:load,
-             pct:Math.round((load/RM[ex.rm])*100), warmups:needsWarmup ? generateWarmups(load, ex.rm) : null, plates:plateMath(load) };
+    const rows = [];
+    let headLoad, headReps, repsLabel, sets, selfDescribing = false;
+    if (w.top || w.calib) {
+      if (w.calib) rows.push({ w:null, r:1, calib:true });
+      else rows.push({ w:w.top.l, r:w.top.r, top:true });
+      for (let i = 0; i < w.back.s; i++) rows.push({ w:w.back.l, r:w.back.r });
+      sets = rows.length;
+      headLoad = w.top ? w.top.l : w.back.l;
+      headReps = w.top ? w.top.r : w.back.r;
+      repsLabel = w.calib ? `1 + ${w.back.s}×${w.back.r}` : `1×${w.top.r} + ${w.back.s}×${w.back.r}`;
+      selfDescribing = true;
+    } else {
+      sets = REDUCED.has(week) || !w.s ? w.s : w.s;
+      for (let i = 0; i < w.s; i++) rows.push({ w:w.l, r:w.r });
+      headLoad = w.l; headReps = w.r; repsLabel = w.rl || String(w.r);
+    }
+    const label = w.calib
+      ? `single @ RPE 7.5–8.5, then ${fmtLb(w.back.l)} lb`
+      : ex.plus ? `+${fmtLb(headLoad)} lb` : `${fmtLb(headLoad)} lb`;
+    return {
+      sets, repsLabel, repsNum:headReps, loadLabel:label, loadNum:headLoad, rows, selfDescribing: !!selfDescribing,
+      pct: ex.rm && RM[ex.rm] ? Math.round((headLoad / RM[ex.rm]) * 100) : null,
+      system: ex.plus ? BW + headLoad : null,
+      warmups: ex.ramp ? ex.ramp.map(([w2, r]) => ({ w:w2 === "BW" ? "BW" : (ex.plus ? `+${fmtLb(w2)}` : fmtLb(w2)), r }))
+                       : ex.bar ? generateWarmups(headLoad, ex.rm) : null,
+      plates: ex.bar ? plateMath(headLoad) : null,
+      calib: !!w.calib,
+    };
   }
-  const isPrimer = ex.tag === "primer";
-  const sets = !isPrimer && REDUCED.has(week) ? Math.min(2, ex.sets) : ex.sets;
+  // Fixed accessory. Deload weeks floor everything to 2 sets except the shoulder-health
+  // and prophylactic items, which §5.11/§5.10 hold at full dose.
+  const sets = REDUCED.has(week) && !ex.keepOnDeload ? Math.min(2, ex.sets) : ex.sets;
   const repsNum = parseFloat(ex.reps);
-  return { sets, repsLabel:ex.reps, repsNum:isNaN(repsNum)?"":repsNum, loadLabel:ex.load, loadNum:ex.loadNum ?? null, pct:null, warmups:null, plates:null };
+  const rn = isNaN(repsNum) ? "" : repsNum;
+  return { sets, repsLabel:ex.reps, repsNum:rn, loadLabel:ex.load, loadNum:ex.loadNum ?? null, pct:null,
+           warmups:null, plates:null, rows:Array.from({length:sets}, () => ({ w:ex.loadNum ?? null, r:rn })) };
 }
+
+/* Prescribed weekly volume by movement family — the §5.3 hard floors, computed live
+   from WAVE so an autoregulation edit can never silently break a floor. */
+const PRESS_IDS = ["dip","bench","ohptech","ohp","incline","dipvol"];
+const VPULL_IDS = ["pullup","pullupvol","pullupss"];
+const HPULL_IDS = ["row1","row2"];
+function weekVolume(week) {
+  let press = 0, vpull = 0, hpull = 0, lower = 0;
+  const shoulder = new Set(), abs = new Set();
+  DAYS.forEach(d => d.exercises.forEach(ex => {
+    const rx = getRx(ex, week);
+    if (!rx || !rx.sets) return;
+    if (PRESS_IDS.includes(ex.id)) press += rx.sets;
+    if (VPULL_IDS.includes(ex.id)) vpull += rx.sets;
+    if (HPULL_IDS.includes(ex.id)) hpull += rx.sets;
+    if (ex.tag === "shoulder health") shoulder.add(d.id);
+    if (ex.tag === "core") abs.add(d.id);
+    if (ex.id === "squat" || ex.id === "dl") lower += 1;
+  }));
+  const pull = vpull + hpull;
+  return { press, vpull, hpull, pull, lower, shoulder:shoulder.size, abs:abs.size,
+           ratio: pull ? Math.round((press / pull) * 100) / 100 : null };
+}
+const FLOORS = { press:[16,20], vpull:[8,12], hpull:[6,null], lower:[2,2], shoulder:[3,null], abs:[3,null], ratio:1.30 };
+
 const ytUrl = (name) => "https://www.youtube.com/results?search_query=" + encodeURIComponent("how to " + name + " form guide") + "&sp=EgIYAQ%253D%253D";
 const e1rm = (w, r) => Math.round(w * (1 + r/30));
 
-const DEFAULT_SETTINGS = { theme:"iron", tone:"radar", vibrate:true, autoRest:true, planName:"Press / Priority", dayMap:{ mon:1, tue:2, thu:4, fri:5 } };
+const DEFAULT_SETTINGS = { theme:"iron", tone:"radar", vibrate:true, autoRest:true,
+  planName:"Astra · Concurrent Block", dayMap:{ sun:0, mon:1, wed:3, fri:5 } };
 
 /* ═══════════ TIMER BAR — owns its own tick, so the rest of the app never re-renders during a countdown ═══════════ */
 function TimerBar({ label, endsAt, onDone, onExtend, onStop }) {
@@ -216,9 +560,9 @@ function SessionClock({ start, end }) {
 }
 
 /* ═══════════ APP ═══════════ */
-export default function PressPriorityTracker() {
+export default function ConcurrentBlockTracker() {
   const [week, setWeek] = useState(1);
-  const [day, setDay] = useState("mon");
+  const [day, setDay] = useState("sun");
   const [logs, setLogs] = useState({});
   const [extraSets, setExtraSets] = useState({});
   const [notes, setNotes] = useState({});
@@ -226,7 +570,7 @@ export default function PressPriorityTracker() {
   const [altChoice, setAltChoice] = useState({});
   const [done, setDone] = useState({});
   const [sessDone, setSessDone] = useState({});
-  const [tested, setTested] = useState({ bench:"", ohp:"" });
+  const [tested, setTested] = useState({ ohp:"", dip:"", pullup:"", broad:"", broadBase:"" });
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [restorePaste, setRestorePaste] = useState("");
@@ -237,6 +581,12 @@ export default function PressPriorityTracker() {
   const dragRef = useRef(null);                   // live drag session data (not state — avoids re-render churn per move)
   const [barSpeed, setBarSpeed] = useState({});   // { "week-day-exId": "fast"|"on-target"|"grindy" }
   const [sessionTime, setSessionTime] = useState({}); // { "week-day": { start, end } }
+  const [elastic, setElastic] = useState({});     // { "week-day-tier": contacts }
+  const [elasticQ, setElasticQ] = useState({});   // { "week-day": "clean"|"degraded"|"stopped" }
+  const [sprintLog, setSprintLog] = useState({}); // { "week": { reps, quality, note } }
+  const [primerResp, setPrimerResp] = useState({});// { "week-day": "readying"|"neutral"|"fatiguing" }
+  const [addCheck, setAddCheck] = useState({});   // { "week-day": { post, next, detail } }
+  const [archived, setArchived] = useState(null); // previous program's training data, kept not deleted
   const [warmOpen, setWarmOpen] = useState(false);
   const [wake, setWake] = useState(false);
   const [toast, setToast] = useState("");
@@ -256,20 +606,47 @@ export default function PressPriorityTracker() {
         const r = await window.storage.get("pp-tracker-v3");
         if (r && r.value) {
           const d = JSON.parse(r.value);
+          if (d.program !== PROGRAM_ID) {
+            // Bundle from the previous program. Preserve every bit of it under `archived`
+            // (it also rides along in backups), reset the block's own state, and keep only
+            // the personal preferences that still make sense.
+            setArchived(d.archived || {
+              program: "press-priority-v1.3", archivedAt: new Date().toISOString(),
+              week: d.week, logs: d.logs || {}, extraSets: d.extraSets || {}, notes: d.notes || {},
+              exNotes: d.exNotes || {}, altChoice: d.altChoice || {}, done: d.done || {},
+              sessDone: d.sessDone || {}, tested: d.tested || {}, order: d.order || {},
+              barSpeed: d.barSpeed || {}, sessionTime: d.sessionTime || {},
+            });
+            const st = { ...DEFAULT_SETTINGS };
+            ["theme", "tone", "vibrate", "autoRest"].forEach(k => {
+              if (d.settings && d.settings[k] !== undefined) st[k] = d.settings[k];
+            });
+            if (!TONES[st.tone]) st.tone = "radar";
+            setSettings(st);
+            const match = DAYS.find(x => st.dayMap[x.id] === new Date().getDay());
+            setDay(match ? match.id : "sun");
+            loaded.current = true;
+            setStatus("ready");
+            return;
+          }
+          setArchived(d.archived || null);
           setWeek(d.week ?? 1);
           setLogs(d.logs || {}); setExtraSets(d.extraSets || {}); setNotes(d.notes || {});
           setExNotes(d.exNotes || {});
           const ac = {};
           Object.entries(d.altChoice || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== false) ac[k] = true; });
           setAltChoice(ac);
-          setDone(d.done || {}); setSessDone(d.sessDone || {}); setTested(d.tested || { bench:"", ohp:"" });
+          setDone(d.done || {}); setSessDone(d.sessDone || {});
+          setTested({ ohp:"", dip:"", pullup:"", broad:"", broadBase:"", ...(d.tested || {}) });
           setOrder(d.order || {}); setBarSpeed(d.barSpeed || {}); setSessionTime(d.sessionTime || {});
+          setElastic(d.elastic || {}); setElasticQ(d.elasticQ || {}); setSprintLog(d.sprintLog || {});
+          setPrimerResp(d.primerResp || {}); setAddCheck(d.addCheck || {});
           const st = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
           if (!TONES[st.tone]) st.tone = "radar";
           setSettings(st);
           const dm = { ...DEFAULT_SETTINGS.dayMap, ...(st.dayMap || {}) };
           const match = DAYS.find(x => dm[x.id] === new Date().getDay());
-          setDay(d.day && (DAYS.some(x => x.id === d.day) || TESTS.some(x => x.id === d.day)) ? d.day : (match ? match.id : "mon"));
+          setDay(d.day && DAYS.some(x => x.id === d.day) ? d.day : (match ? match.id : "sun"));
         } else {
           const match = DAYS.find(x => DEFAULT_SETTINGS.dayMap[x.id] === new Date().getDay());
           if (match) setDay(match.id);
@@ -288,12 +665,12 @@ export default function PressPriorityTracker() {
     if (!loaded.current) return;
     setStatus("saving");
     clearTimeout(saveTimer.current);
-    const bundle = { week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime };
+    const bundle = { program: PROGRAM_ID, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, primerResp, addCheck, archived };
     saveTimer.current = setTimeout(async () => {
       try { await window.storage.set("pp-tracker-v3", JSON.stringify(bundle)); setStatus("saved"); }
       catch (e) { setStatus("error"); }
     }, 700);
-  }, [week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime]);
+  }, [week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, primerResp, addCheck, archived]);
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2500); };
 
@@ -305,11 +682,12 @@ export default function PressPriorityTracker() {
     if (!audioRef.current) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) audioRef.current = new AC(); }
     if (audioRef.current && audioRef.current.state === "suspended") audioRef.current.resume();
   };
-  const startRestById = (exId) => {
-    const s = REST[exId];
+  const restKey = (exId) => `${day}-${exId}`;
+  const startRestById = (exId, secs) => {
+    const s = secs != null ? secs : REST[restKey(exId)];
     if (s == null) return;
     ensureAudio();
-    const base = EX_INDEX[exId];
+    const base = EX_INDEX[restKey(exId)];
     const label = (altChoice[`${week}-${day}-${exId}`] && base?.alt) || base?.name || "Rest";
     // First timer wins: if one is already counting down, ignore new starts (functional
     // updater keeps this race-safe when two sets complete in quick succession).
@@ -344,7 +722,7 @@ export default function PressPriorityTracker() {
     const after = { ...row, [field]: val };
     const nowComplete = !!(after.w && after.r);
     const rirEntered = field === "rir" && val !== "" && !row.rir;
-    if (settings.autoRest && REST[exId] != null && ((!wasComplete && nowComplete) || rirEntered)) startRestById(exId);
+    if (settings.autoRest && REST[restKey(exId)] != null && ((!wasComplete && nowComplete) || rirEntered)) startRestById(exId);
     setLogs((prev) => {
       const next = { ...prev };
       const wk = { ...(next[week] || {}) };
@@ -358,19 +736,12 @@ export default function PressPriorityTracker() {
   const addSet = (exId) => setExtraSets(p => ({ ...p, [k3(exId)]: (p[k3(exId)]||0)+1 }));
   const removeSet = (exId) => setExtraSets(p => { const k = k3(exId); if (!p[k]) return p; return { ...p, [k]: p[k]-1 }; });
   const setBar = (exId, v) => setBarSpeed(p => (p[k3(exId)] === v ? p : { ...p, [k3(exId)]: v }));
-  const changeWeek = (w) => {
-    const c = Math.max(1, Math.min(13, w));
-    setWeek(c);
-    if (c === 13 && !TESTS.some(t => t.id === day)) setDay("benchtest");
-    if (c < 13 && TESTS.some(t => t.id === day)) {
-      const match = DAYS.find(x => dayMap[x.id] === new Date().getDay());
-      setDay(match ? match.id : "mon");
-    }
-  };
+  const changeWeek = (w) => setWeek(Math.max(1, Math.min(12, w)));
   const fmtPrev = (e) => (e && (e.w || e.r) ? `${e.w||"–"}×${e.r||"–"}` : null);
 
   const requiresWeight = (ex, rx) => rx.loadNum != null || /lb|kg/i.test(rx.loadLabel || "");
   const isAutoDone = (ex, rx) => {
+    if (!rx || !(rx.sets > 0)) return false;
     const rows = logs?.[week]?.[day]?.[ex.id] || [];
     for (let i = 0; i < rx.sets; i++) {
       const e = rows[i];
@@ -381,14 +752,23 @@ export default function PressPriorityTracker() {
   const isDoneEff = (ex, rx) => { const k = k3(ex.id); return done[k] !== undefined ? done[k] : isAutoDone(ex, rx); };
   const toggleDone = (ex, rx) => { const cur = isDoneEff(ex, rx); setDone(p => ({ ...p, [k3(ex.id)]: !cur })); };
 
-  const weekSubTwo = (w) => {
+  // A set is flagged when it lands below the phase's RIR floor (§5.12): 2 in accumulation,
+  // 1 in intensification, 4 in a deload week. Two flags in a week is a Level 1 signal.
+  const weekBelowFloor = (w) => {
+    const floor = RIR_FLOOR(w);
     let n = 0;
     Object.values(logs[w] || {}).forEach(dy => Object.values(dy).forEach(rows => {
-      if (Array.isArray(rows)) rows.forEach(e => { const r = parseFloat(e?.rir); if (!isNaN(r) && r < 2) n++; });
+      if (Array.isArray(rows)) rows.forEach(e => { const r = parseFloat(e?.rir); if (!isNaN(r) && r < floor) n++; });
     }));
     return n;
   };
-  const subTwoCount = week <= 12 ? weekSubTwo(week) : 0;
+  const subTwoCount = weekBelowFloor(week);
+  // The adductor gate outranks everything else in the block (§5.10).
+  const weekAdductorFlag = (w) => DAYS.some(d => {
+    const c = addCheck[`${w}-${d.id}`];
+    return c && (c.post === "abnormal" || c.next === "abnormal");
+  });
+  const addFlag = weekAdductorFlag(week);
 
   /* backup / review */
   const copyText = async (txt, okMsg) => {
@@ -400,7 +780,7 @@ export default function PressPriorityTracker() {
       document.body.removeChild(ta);
     }
   };
-  const exportBackup = () => copyText(JSON.stringify({ app:"press-priority", version:13, exported:new Date().toISOString(), week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime }), "Backup JSON copied — keep it somewhere safe");
+  const exportBackup = () => copyText(JSON.stringify({ app:"concurrent-block", program:PROGRAM_ID, version:14, exported:new Date().toISOString(), archived, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, primerResp, addCheck }), "Backup JSON copied — keep it somewhere safe");
   const restoreBackup = () => {
     try {
       const d = JSON.parse(restorePaste);
@@ -410,32 +790,48 @@ export default function PressPriorityTracker() {
       const ac = {};
       Object.entries(d.altChoice || {}).forEach(([k, v]) => { if (v) ac[k] = true; });
       setAltChoice(ac);
-      setDone(d.done||{}); setSessDone(d.sessDone||{}); setTested(d.tested||{bench:"",ohp:""});
+      setDone(d.done||{}); setSessDone(d.sessDone||{});
+      setTested({ ohp:"", dip:"", pullup:"", broad:"", broadBase:"", ...(d.tested||{}) });
       setOrder(d.order||{}); setBarSpeed(d.barSpeed||{}); setSessionTime(d.sessionTime||{});
+      setElastic(d.elastic||{}); setElasticQ(d.elasticQ||{}); setSprintLog(d.sprintLog||{});
+      setPrimerResp(d.primerResp||{}); setAddCheck(d.addCheck||{}); setArchived(d.archived||null);
       if (d.settings) { const st = { ...DEFAULT_SETTINGS, ...d.settings }; if (!TONES[st.tone]) st.tone = "radar"; setSettings(st); }
       setRestorePaste(""); flash("Backup restored");
     } catch (e) { flash("That doesn't look like a valid backup"); }
   };
+  const elasticSummary = (w, dId) => {
+    const px = PLYO[w]?.[dId] || {};
+    return Object.keys(TIER_NAME).filter(t => px[t] != null).map(t => {
+      const act = elastic[`${w}-${dId}-${t}`];
+      return `${t.toUpperCase()} ${act === undefined || act === "" ? "not logged" : act}/${px[t]}`;
+    }).join(", ");
+  };
   const buildReview = (w) => {
-    const L = [];
-    L.push(`WEEK ${w} TRAINING LOG — Press-Priority Hybrid v1.3 (${BLOCK(w)}${BADGE[w] ? " · " + BADGE[w] : ""})`);
-    L.push(`Rules of record: RIR ≥2 everywhere; two sub-2-RIR sets in a week = deload template next week (§9.3); grindy double → −5 lb; squat cap 225; protected weeks 3/7/10/11; dips yield only to a real shoulder signal.`);
+    const L = [], vol = weekVolume(w);
+    L.push(`WEEK ${w} TRAINING LOG — Astra Concurrent Block ${BLOCK_VERSION} (${PHASE(w)}${BADGE[w] ? " · " + BADGE[w] : ""})`);
+    L.push(`Rules of record: conflict hierarchy = health > OHP/dip/pull-up > prescribed rides > elastic quality > deadlift maintenance > squat/bench > secondary volume. Target RIR this week ${TARGET_RIR(w)}. Elastic work may never cost an OHP, dip, or pull-up session. Adductor gate governs every running and tier progression.`);
     L.push("");
     DAYS.forEach(d => {
-      L.push(`${WEEKDAYS[dayMap[d.id]]} — ${d.lift} day${sessDone[`${w}-${d.id}`] ? " · session finished" : ""}`);
+      L.push(`${WEEKDAYS[dayMap[d.id]]} — ${d.lift} day · ${d.title}${sessDone[`${w}-${d.id}`] ? " · session finished" : ""}`);
+      if (isTestSession(w, d.id)) { L.push("  TEST SESSION — see results below."); L.push(""); return; }
       d.exercises.forEach(ex => {
+        if (ex.kind === "elastic") { const sum = elasticSummary(w, d.id); if (sum) L.push(`  Elastic contacts (actual/target): ${sum}${elasticQ[`${w}-${d.id}`] ? ` · quality ${elasticQ[`${w}-${d.id}`]}` : ""}`); return; }
+        if (ex.kind === "sprint") { const sp = SPRINT[w], lg = sprintLog[w] || {}; L.push(`  Acceleration — Rx ${sp.label} ${sp.surface} @ ${sp.intensity} (${sp.m} m): completed ${lg.reps || "not logged"} reps${lg.quality ? ` · ${lg.quality}` : ""}${lg.note ? ` · "${lg.note}"` : ""}`); return; }
+        if (ex.kind === "primer") { const pr = primerResp[`${w}-${d.id}`]; L.push(`  Primer: ${pr || "response not logged"}`); return; }
+        if (ex.kind === "check") { const c = addCheck[`${w}-${d.id}`] || {}; L.push(`  Adductor check — post-session: ${c.post || "not run"} · next morning: ${c.next || "not run"}${c.detail ? ` · "${c.detail}"` : ""}`); return; }
         const rx = getRx(ex, w);
-        if (!rx) { L.push(`  ${ex.name}: off this week (deload/taper)`); return; }
+        if (!rx) { L.push(`  ${ex.name}: off this week`); return; }
         const subbed = altChoice[`${w}-${d.id}-${ex.id}`];
         const shownName = subbed ? `${ex.name} (subbed: ${ex.alt})` : ex.name;
         const rows = logs?.[w]?.[d.id]?.[ex.id] || [];
         const rxStr = `Rx ${rx.sets}×${rx.repsLabel}${rx.loadLabel ? " @ " + rx.loadLabel : ""}`;
         const logged = rows.filter(e => e && (e.w || e.r));
-        if (!logged.length) { L.push(`  ${shownName} — ${rxStr}: NOT LOGGED`); }
+        if (!logged.length) L.push(`  ${shownName} [${CUT_LABEL[ex.cut] || "-"}] — ${rxStr}: NOT LOGGED`);
         else {
           const sets = rows.map(e => (e && (e.w || e.r)) ? `${e.w||"?"}×${e.r||"?"}${e.rir!=null && e.rir!=="" ? "@RIR"+e.rir : ""}` : null).filter(Boolean).join(", ");
-          L.push(`  ${shownName} — ${rxStr}: ${sets}`);
+          L.push(`  ${shownName} [${CUT_LABEL[ex.cut] || "-"}] — ${rxStr}: ${sets}`);
         }
+        if (ex.wave && ex.tag === "main lift") L.push(`    Bar speed: ${barSpeed[`${w}-${d.id}-${ex.id}`] || "on-target"}`);
         const en = exNotes[`${w}-${d.id}-${ex.id}`];
         if (en) L.push(`    Exercise note: "${en}"`);
       });
@@ -443,38 +839,51 @@ export default function PressPriorityTracker() {
       if (nt) L.push(`  Session notes: "${nt}"`);
       L.push("");
     });
-    const s2 = weekSubTwo(w);
-    L.push(`AUTO-FLAGS: ${s2} sub-2-RIR set${s2===1?"":"s"} this week${s2>=2 ? " — TWO-STRIKE RULE TRIPPED (deload template next week per §9.3)" : ""}.`);
+    const s2 = weekBelowFloor(w);
+    L.push(`VOLUME AUDIT (prescribed): pressing ${vol.press} (floor 16–20) · vertical pull ${vol.vpull} (8–12) · horizontal pull ${vol.hpull} (6) · lower-body exposures ${vol.lower} (exactly 2) · shoulder-health sessions ${vol.shoulder} (3 of 4) · direct ab sessions ${vol.abs} (3) · press:pull ${vol.ratio} (≤1.30)${REDUCED.has(w) ? " — floors WAIVED this week: scheduled deload" : ""}`);
+    L.push(`AUTO-FLAGS: ${s2} set${s2===1?"":"s"} below the week's RIR floor of ${RIR_FLOOR(w)}${s2>=2 ? " — Level 1 signal, hold the next scheduled increment" : ""}. Adductor: ${weekAdductorFlag(w) ? "ABNORMAL reported — running and tiers 2/3 gated" : "normal"}.`);
     L.push("");
-    L.push("Coach: review this week against the program's autoregulation rules (§9) and goal hierarchy (presses first, fresh legs for tennis). Tell me: (1) any rule trips and the required response, (2) whether next week runs as written or modified, (3) load/RIR trends on bench and OHP worth acting on, (4) shoulder-budget signals from the notes, (5) any exercise-note requests (load bumps, swaps) to approve or veto.");
+    L.push("Coach: review this week against docs/12-week-concurrent-block.md §17 (fatigue levels, trigger table) and §5.6 (progression cadence). Tell me: (1) fatigue level per domain — global, push, pull, lower, elastic/running — with reasons, (2) which scheduled increments run and which hold, with exact before and after, (3) whether the adductor gate permits the next running and tier step, (4) whether the time budget still holds for any session you change, (5) pace against the four block criteria.");
     return L.join("\n");
   };
+
   // Structured export for the Claude Code autoregulation loop (docs/autoregulation-criteria.md).
-  // Includes trailing history per main lift so the 2-consecutive-exposure rule can be checked.
-  const mainTargetRir = (w) => ([4,8,12].includes(w) ? 3 : 2);
   const buildReviewJSON = (w) => {
     const num = (x) => (x === "" || x == null ? null : parseFloat(x));
     const days = DAYS.map(d => ({
-      day: d.id, weekday: WEEKDAYS[dayMap[d.id]], lift: d.lift,
+      day: d.id, weekday: WEEKDAYS[dayMap[d.id]], lift: d.lift, title: d.title,
       finished: !!sessDone[`${w}-${d.id}`],
-      exercises: d.exercises.map(ex => {
+      isTestSession: isTestSession(w, d.id),
+      minuteBudget: { ...d.budget, total: d.budget.warm + d.budget.pri + d.budget.acc + d.budget.fin },
+      elastic: (() => {
+        const px = PLYO[w]?.[d.id] || {};
+        const keys = Object.keys(TIER_NAME).filter(t => px[t] != null);
+        if (!keys.length) return null;
+        return { quality: elasticQ[`${w}-${d.id}`] || null,
+          tiers: keys.map(t => ({ tier:t, target:px[t], actual:num(elastic[`${w}-${d.id}-${t}`]) })) };
+      })(),
+      sprint: d.id === "fri" ? { ...SPRINT[w], completedReps: num((sprintLog[w]||{}).reps),
+        quality: (sprintLog[w]||{}).quality || null, note: (sprintLog[w]||{}).note || null,
+        ceilingOk: SPRINT[w].m <= SPRINT_CEILING } : null,
+      primer: d.exercises.some(e => e.kind === "primer") ? (primerResp[`${w}-${d.id}`] || null) : null,
+      adductorCheck: addCheck[`${w}-${d.id}`] || null,
+      exercises: d.exercises.filter(ex => !ex.kind || ex.kind === "main" || ex.kind === "copen").map(ex => {
         const rx = getRx(ex, w), key = `${w}-${d.id}-${ex.id}`;
         const actual = (logs?.[w]?.[d.id]?.[ex.id] || [])
-          .filter(e => e && (e.w || e.r))
-          .map(e => ({ w: num(e.w), r: num(e.r), rir: num(e.rir) }));
-        const o = {
-          id: ex.id, name: ex.name, category: ex.tag, isMain: !!ex.wave,
-          rx: rx ? { sets: rx.sets, reps: rx.repsLabel, load: rx.loadNum, rir: ex.wave ? mainTargetRir(w) : null } : null,
-          actual,
-        };
-        if (altChoice[key]) { o.subbed = ex.alt; }
-        if (ex.wave) o.barSpeed = barSpeed[key] || "on-target";
+          .filter(e => e && (e.w || e.r)).map(e => ({ w: num(e.w), r: num(e.r), rir: num(e.rir) }));
+        const o = { id: ex.id, name: ex.name, category: ex.tag, cut: CUT_LABEL[ex.cut] || null,
+          isMain: ex.tag === "main lift",
+          rx: rx ? { sets: rx.sets, reps: rx.repsLabel, load: rx.loadNum, external: !!ex.plus,
+                     systemLoad: rx.system || null, rir: TARGET_RIR(w) } : null,
+          actual };
+        if (altChoice[key]) o.subbed = ex.alt;
+        if (ex.tag === "main lift") o.barSpeed = barSpeed[key] || "on-target";
         const note = exNotes[key]; if (note) o.note = note;
         return o;
       }),
     }));
     const history = {};
-    DAYS.forEach(d => d.exercises.filter(ex => ex.wave).forEach(ex => {
+    DAYS.forEach(d => d.exercises.filter(ex => ex.wave && ex.tag === "main lift").forEach(ex => {
       const hist = [];
       for (let pw = w - 1; pw >= Math.max(1, w - 3); pw--) {
         const rows = (logs?.[pw]?.[d.id]?.[ex.id] || []).filter(e => e && (e.w || e.r));
@@ -486,19 +895,23 @@ export default function PressPriorityTracker() {
           barSpeed: barSpeed[`${pw}-${d.id}-${ex.id}`] || "on-target",
           allSets: prx ? rows.length >= prx.sets : false });
       }
-      if (hist.length) history[ex.id] = hist;
+      if (hist.length) history[`${d.id}-${ex.id}`] = hist;
     }));
+    const vol = weekVolume(w);
     return JSON.stringify({
-      app: "press-priority", kind: "week-report", version: 13,
-      week: w, block: BLOCK(w), badge: BADGE[w] || null,
-      flags: { protected: [3,7,10,11].includes(w), deload: [4,8].includes(w), taper: w === 12 },
-      days, history, autoFlags: { subTwoRir: weekSubTwo(w) },
+      app: "concurrent-block", kind: "week-report", version: 14, blockVersion: BLOCK_VERSION,
+      week: w, phase: PHASE(w), badge: BADGE[w] || null, targetRir: TARGET_RIR(w), rirFloor: RIR_FLOOR(w),
+      flags: { deload: REDUCED.has(w), testWeek: w === TEST_WEEK, tier3Active: (PLYO[w]?.fri?.t3 || 0) > 0 },
+      volumeAudit: { ...vol, floors: FLOORS, waived: REDUCED.has(w) },
+      days, history,
+      tested: w === TEST_WEEK ? tested : undefined,
+      autoFlags: { belowRirFloor: weekBelowFloor(w), adductorAbnormal: weekAdductorFlag(w) },
     }, null, 2);
   };
 
   /* derived */
-  const isTest = week === 13;
-  const dayData = isTest ? null : DAYS.find(d => d.id === day);
+  const isTest = isTestSession(week, day);
+  const dayData = DAYS.find(d => d.id === day);
   const sessKey = `${week}-${day}`;
   // Apply the athlete's custom order for this session (default = program order); any
   // exercise not in the saved order (e.g. new to this week) is appended in program order.
@@ -512,8 +925,17 @@ export default function PressPriorityTracker() {
     dayData.exercises.forEach(e => { if (!seen.has(e.id)) res.push(e); });
     return res;
   })();
-  const visibleEx = orderedEx.filter(ex => getRx(ex, week));
-  const doneCount = visibleEx.filter(ex => isDoneEff(ex, getRx(ex, week))).length;
+  // Elastic / sprint / primer / check cards have no WAVE row; they are visible when the
+  // week actually prescribes something for them.
+  const hasBlock = (ex) => {
+    if (ex.kind === "elastic") return Object.keys(PLYO[week]?.[day] || {}).length > 0;
+    if (ex.kind === "sprint") return !!SPRINT[week];
+    if (ex.kind === "primer") return day !== "fri";
+    if (ex.kind === "check") return Object.keys(PLYO[week]?.[day] || {}).length > 0 || day === "fri";
+    return !!getRx(ex, week);
+  };
+  const visibleEx = isTest ? [] : orderedEx.filter(hasBlock);
+  const doneCount = visibleEx.filter(ex => isDoneEff(ex, getRx(ex, week) || { sets:1 })).length;
   const moveEx = (exId, dir) => {
     const vis = visibleEx.map(e => e.id);
     const idx = vis.indexOf(exId), j = idx + dir;
@@ -604,38 +1026,240 @@ export default function PressPriorityTracker() {
   /* ── render functions (plain calls, stable element identity — inputs never lose focus) ── */
   const renderSetRow = (ex, rx, i) => {
     const cur = logs?.[week]?.[day]?.[ex.id]?.[i] || {};
-    const prev = week > 1 && week <= 12 ? fmtPrev(logs?.[week-1]?.[day]?.[ex.id]?.[i]) : null;
+    const prev = week > 1 ? fmtPrev(logs?.[week-1]?.[day]?.[ex.id]?.[i]) : null;
     const rirVal = cur.rir ?? "";
-    const rirWarn = rirVal !== "" && parseFloat(rirVal) < 2;
+    const floor = RIR_FLOOR(week);
+    const rirWarn = rirVal !== "" && parseFloat(rirVal) < floor;
+    const tgt = rx.rows?.[i] || { w: rx.loadNum, r: rx.repsNum };
     const repsNum = parseFloat(cur.r);
-    const target = typeof rx.repsNum === "number" ? rx.repsNum : NaN;
+    const target = typeof tgt.r === "number" ? tgt.r : NaN;
     const repClass = !isNaN(repsNum) && !isNaN(target) ? (repsNum < target ? "under" : repsNum > target ? "over" : "") : "";
     const isExtra = i >= rx.sets;
     return (
-      <div className="set-row" key={i} style={isExtra ? { opacity:0.75 } : {}}>
-        <span className="set-n">{i+1}</span>
+      <div className={`set-row ${tgt.top ? "topset" : ""} ${tgt.calib ? "calibrow" : ""}`} key={i} style={isExtra ? { opacity:0.75 } : {}}>
+        <span className="set-n">{tgt.calib ? "C" : tgt.top ? "T" : i+1}</span>
         <span className={`prev ${prev ? "" : "empty"}`}>{prev || "—"}</span>
-        <input inputMode="decimal" placeholder={rx.loadNum ?? ""} value={cur.w || ""} aria-label={`${ex.name} set ${i+1} weight`}
+        <input inputMode="decimal" placeholder={tgt.calib ? "?" : (tgt.w ?? "")} value={cur.w || ""} aria-label={`${ex.name} set ${i+1} weight`}
           onChange={e => setEntry(ex.id, i, "w", e.target.value)} />
-        <input inputMode="numeric" placeholder={rx.repsNum} value={cur.r || ""} className={repClass} aria-label={`${ex.name} set ${i+1} reps`}
+        <input inputMode="numeric" placeholder={tgt.r ?? ""} value={cur.r || ""} className={repClass} aria-label={`${ex.name} set ${i+1} reps`}
           onChange={e => setEntry(ex.id, i, "r", e.target.value)} />
-        <input inputMode="decimal" placeholder="2" value={rirVal} className={rirWarn ? "warn" : ""} aria-label={`${ex.name} set ${i+1} RIR`}
+        <input inputMode="decimal" placeholder={String(floor)} value={rirVal} className={rirWarn ? "warn" : ""} aria-label={`${ex.name} set ${i+1} RIR`}
           onChange={e => setEntry(ex.id, i, "rir", e.target.value)} />
-        <button className="rxfill" aria-label="Fill prescribed" onClick={() => {
-          if (rx.loadNum != null) setEntry(ex.id, i, "w", String(rx.loadNum));
-          if (rx.repsNum !== "") setEntry(ex.id, i, "r", String(rx.repsNum));
+        <button className="rxfill" aria-label="Fill prescribed" disabled={tgt.calib} onClick={() => {
+          if (tgt.w != null) setEntry(ex.id, i, "w", String(tgt.w));
+          if (tgt.r != null && tgt.r !== "") setEntry(ex.id, i, "r", String(tgt.r));
           if (settings.autoRest) startRestById(ex.id);
         }}>Rx</button>
       </div>
     );
   };
 
+  const cutChip = (ex) => ex.cut ? <em className={`tag cut-${ex.cut}`}>{CUT_LABEL[ex.cut]}</em> : null;
+
+  const cardHead = (ex, activeName, exDone, rx) => (
+    <div className="ex-head">
+      <div className="ex-title">
+        <h2 className="exname">{activeName}</h2>
+        <div className="tagrow">
+          {altChoice[k3(ex.id)] && <em className="tag alt-tag">sub</em>}
+          {ex.tag && <em className="tag">{ex.tag}</em>}
+          {cutChip(ex)}
+        </div>
+      </div>
+      <div className="ex-actions">
+        <button className="draghandle" aria-label={`Reorder ${activeName} — drag, or press then use the up and down arrow keys`}
+          onPointerDown={e => startDrag(e, ex.id)} onPointerMove={onDragMove} onPointerUp={endDrag} onPointerCancel={endDrag}
+          onKeyDown={e => { if (e.key === "ArrowUp") { e.preventDefault(); moveEx(ex.id, -1); } else if (e.key === "ArrowDown") { e.preventDefault(); moveEx(ex.id, 1); } }}>
+          <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><g fill="currentColor"><circle cx="6" cy="3.5" r="1.35"/><circle cx="10" cy="3.5" r="1.35"/><circle cx="6" cy="8" r="1.35"/><circle cx="10" cy="8" r="1.35"/><circle cx="6" cy="12.5" r="1.35"/><circle cx="10" cy="12.5" r="1.35"/></g></svg>
+        </button>
+        <a className="ytbtn" href={ytUrl(activeName)} target="_blank" rel="noopener noreferrer" aria-label={`Watch a video example of ${activeName} on YouTube`}>
+          <svg viewBox="0 0 28 20" width="26" height="19" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#FF0000"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg>
+        </a>
+        <button className={`donebtn ${exDone ? "on" : ""}`} aria-pressed={exDone} onClick={() => toggleDone(ex, rx || { sets:1 })}>✓</button>
+      </div>
+    </div>
+  );
+
+  /* Elastic block — outside the 75-minute cap, counted per limb on unilateral work.
+     The whole point of this card is that plyometric dose is a LEDGER, not a feeling:
+     target contacts per tier come from PLYO, actual contacts get logged. */
+  const renderElastic = (ex) => {
+    const px = PLYO[week]?.[day] || {};
+    const tiers = Object.keys(TIER_NAME).filter(t => px[t] != null);
+    if (!tiers.length) return null;
+    const exDone = isDoneEff(ex, { sets:1 });
+    const q = elasticQ[sessKey] || "";
+    const total = tiers.reduce((a, t) => a + px[t], 0);
+    return (
+      <section className={`card elasticcard ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
+        {cardHead(ex, ex.name, exDone, null)}
+        <div className="meta-row"><div className="rx"><span>{total} contacts</span><span className="rx-load"> · outside the 75-min cap</span></div></div>
+        {day === "fri" && (
+          <ol className="seqlist">{FRI_SEQUENCE.map((sq, i) => <li key={i}>{sq}</li>)}</ol>
+        )}
+        {tiers.map(t => {
+          const key = `${sessKey}-${t}`;
+          const act = elastic[key] ?? "";
+          const over = act !== "" && parseFloat(act) > px[t] * 1.1;
+          return (
+            <div className="tierrow" key={t}>
+              <div className="tiertop">
+                <span className="tiername">{TIER_NAME[t]}</span>
+                <span className="tiertarget">target {px[t]}</span>
+              </div>
+              <p className="tierex">{t === "t3" ? (TIER3_RX[week] || TIER_EX.t3) : TIER_EX[t]}</p>
+              <div className="tierlog">
+                <label htmlFor={`el-${t}`}>Contacts done</label>
+                <input id={`el-${t}`} inputMode="numeric" placeholder={px[t]} value={act} className={over ? "warn" : ""}
+                  aria-label={`${TIER_NAME[t]} contacts completed`}
+                  onChange={e => setElastic(p => ({ ...p, [key]: e.target.value }))} />
+                <button className="rxfill" aria-label={`Fill prescribed ${t} contacts`}
+                  onClick={() => setElastic(p => ({ ...p, [key]: String(px[t]) }))}>Rx</button>
+              </div>
+            </div>
+          );
+        })}
+        <div className="qrow">
+          <span className="bs-label">Contact quality</span>
+          <div className="barspeed" role="group" aria-label="Elastic contact quality">
+            {[["clean","Clean"],["degraded","Degraded"],["stopped","Stopped early"]].map(([v,lbl]) => (
+              <button key={v} className={`bs-btn ${q === v ? "on" : ""}`} aria-pressed={q === v}
+                aria-label={`Elastic quality ${v}`}
+                onClick={() => setElasticQ(p => ({ ...p, [sessKey]: v }))}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+        {week === 1 && day === "fri" && (
+          <div className="tested-row baseline">
+            <label htmlFor="broadbase">Broad-jump baseline (in) — best of 3</label>
+            <input id="broadbase" inputMode="decimal" value={tested.broadBase || ""} placeholder="—"
+              onChange={e => setTested(p => ({ ...p, broadBase: e.target.value }))} />
+          </div>
+        )}
+        <p className="cue"><b>Instructions:</b> {ex.cue}</p>
+        <input className="exnote" placeholder="Note — contact quality, next-day response" value={exNotes[k3(ex.id)] || ""}
+          onChange={e => setExNotes(p => ({ ...p, [k3(ex.id)]: e.target.value }))} />
+      </section>
+    );
+  };
+
+  /* Acceleration block. The session ceiling (250 m) is enforced in the data, not by hand. */
+  const renderSprint = (ex) => {
+    const sp = SPRINT[week];
+    if (!sp) return null;
+    const exDone = isDoneEff(ex, { sets:1 });
+    const lg = sprintLog[week] || {};
+    const setSp = (f, v) => setSprintLog(p => ({ ...p, [week]: { ...(p[week] || {}), [f]: v } }));
+    return (
+      <section className={`card sprintcard ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
+        {cardHead(ex, ex.name, exDone, null)}
+        <div className="meta-row">
+          <div className="rx"><span>{sp.label}</span><span className="rx-load"> · {sp.surface}</span><span className="rx-pct"> {sp.intensity}</span></div>
+        </div>
+        <div className="sprintmeta">
+          <span><b>{sp.m} m</b> of quality volume</span>
+          <span className={sp.m <= SPRINT_CEILING ? "ok" : "warn-txt"}>ceiling {SPRINT_CEILING} m</span>
+          <span>rest {fmtTime(sp.rest)}–{fmtTime(sp.rest + 60)}</span>
+        </div>
+        <div className="tierlog">
+          <label htmlFor="sprint-reps">Reps completed</label>
+          <input id="sprint-reps" inputMode="numeric" placeholder={sp.reps} value={lg.reps ?? ""} aria-label="Sprint reps completed"
+            onChange={e => setSp("reps", e.target.value)} />
+          <button className="rxfill" aria-label="Fill prescribed sprint reps" onClick={() => setSp("reps", String(sp.reps))}>Rx</button>
+        </div>
+        <div className="qrow">
+          <span className="bs-label">Quality</span>
+          <div className="barspeed" role="group" aria-label="Sprint quality">
+            {[["crisp","Crisp"],["holding","Holding"],["laboured","Laboured"]].map(([v,lbl]) => (
+              <button key={v} className={`bs-btn ${lg.quality === v ? "on" : ""}`} aria-pressed={lg.quality === v}
+                aria-label={`Sprint quality ${v}`} onClick={() => setSp("quality", v)}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+        <div className="set-btns">
+          <button className="ghost timer-btn" onClick={() => startRestById(ex.id, sp.rest)}>⏱ Rest {fmtTime(sp.rest)}</button>
+        </div>
+        <p className="cue"><b>Instructions:</b> {ex.cue}</p>
+        <input className="exnote" placeholder="Note — how the reps felt, any stride change" value={lg.note || ""}
+          onChange={e => setSp("note", e.target.value)} />
+      </section>
+    );
+  };
+
+  /* Primer. Response is a real programming signal (§5.12), so it is logged, not guessed. */
+  const renderPrimer = (ex) => {
+    const exDone = isDoneEff(ex, { sets:1 });
+    const r = primerResp[sessKey] || "";
+    return (
+      <section className={`card primercard ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
+        {cardHead(ex, ex.name, exDone, null)}
+        <div className="meta-row"><div className="rx"><span>{ex.rounds} round{ex.rounds > 1 ? "s" : ""} on a 60-second clock</span><span className="rx-load"> · 2 × 10 kg · RPE ≤ 4 · ≤ 4 min</span></div></div>
+        <ul className="warm-list">
+          <li>2 double kettlebell cleans</li>
+          {ex.press ? <li>1 double strict press</li> : <li className="dropped">Strict press — DROPPED on OHP-priority days</li>}
+          <li>2 double front squats</li>
+        </ul>
+        <div className="qrow">
+          <span className="bs-label">Primer response</span>
+          <div className="barspeed" role="group" aria-label="Primer response">
+            {[["readying","Readying"],["neutral","Neutral"],["fatiguing","Fatiguing"]].map(([v,lbl]) => (
+              <button key={v} className={`bs-btn ${r === v ? "on" : ""}`} aria-pressed={r === v}
+                aria-label={`Primer response ${v}`} onClick={() => setPrimerResp(p => ({ ...p, [sessKey]: v }))}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+        {r === "fatiguing" && <div className="banner soft">Fatiguing: drop to one round next session, then drop the press, then omit the primer. It never counts as productive volume.</div>}
+        <p className="cue"><b>Instructions:</b> {ex.cue} Judge the response against the first ramp set at the same load.</p>
+      </section>
+    );
+  };
+
+  /* Adductor reactive gate (§5.10) — the highest-consequence control in the app.
+     One tap when normal; seven specifics when not. */
+  const renderCheck = (ex) => {
+    const c = addCheck[sessKey] || {};
+    const setC = (f, v) => setAddCheck(p => ({ ...p, [sessKey]: { ...(p[sessKey] || {}), [f]: v } }));
+    const abnormal = c.post === "abnormal" || c.next === "abnormal";
+    return (
+      <section className={`card checkcard ${abnormal ? "alert" : ""}`} key={ex.id} data-exid={ex.id}>
+        <div className="ex-head">
+          <div className="ex-title"><h2 className="exname">{ex.name}</h2>
+            <div className="tagrow"><em className="tag">{ex.tag}</em>{cutChip(ex)}</div></div>
+        </div>
+        {[["post","After this session"],["next","Next morning"]].map(([f, lbl]) => (
+          <div className="checkrow" key={f}>
+            <span className="checklbl">{lbl}</span>
+            <div className="barspeed" role="group" aria-label={`${lbl} adductor check`}>
+              <button className={`bs-btn ${c[f] === "normal" ? "on ok" : ""}`} aria-pressed={c[f] === "normal"}
+                aria-label={`${lbl} adductor normal`} onClick={() => setC(f, "normal")}>Normal</button>
+              <button className={`bs-btn ${c[f] === "abnormal" ? "on bad" : ""}`} aria-pressed={c[f] === "abnormal"}
+                aria-label={`${lbl} adductor abnormal`} onClick={() => setC(f, "abnormal")}>Abnormal</button>
+            </div>
+          </div>
+        ))}
+        {abnormal && (
+          <div className="abnormal">
+            <p><b>Capture all seven:</b> location · severity /10 · onset (which rep, which movement) · duration · effect on stride and gait · effect on squatting · response to gentle resisted adduction.</p>
+            <textarea placeholder="Location, severity, onset, duration, stride effect, squat effect, resisted adduction…"
+              value={c.detail || ""} onChange={e => setC("detail", e.target.value)} />
+            <p className="escalate">Mild familiar soreness resolving in 24–48 h without a movement change: hold and repeat, do not progress. Symptoms increasing, persisting past 48 h, reducing output, or affecting stride: regress one step in the running ladder and remove tier 3. Acute sharp pain, bruising, weakness, progressive symptoms, or movement-altering discomfort: suspend all impact work and obtain clinical evaluation.</p>
+          </div>
+        )}
+        <p className="cue"><b>Instructions:</b> {ex.cue}</p>
+      </section>
+    );
+  };
+
   const renderCard = (ex) => {
+    if (ex.kind === "elastic") return renderElastic(ex);
+    if (ex.kind === "sprint") return renderSprint(ex);
+    if (ex.kind === "primer") return renderPrimer(ex);
+    if (ex.kind === "check") return renderCheck(ex);
     const rx = getRx(ex, week);
     if (!rx) return (
       <section className="card skipped" key={ex.id}>
         <div className="ex-head"><h2>{ex.name}</h2><span className="rx-off">off this week</span></div>
-        <p className="cue"><b>Instructions:</b> No heavy pull on deload/taper weeks — by design.</p>
+        <p className="cue"><b>Instructions:</b> Off this week by design — the deload removes it.</p>
       </section>
     );
     const extraCount = extraSets[k3(ex.id)] || 0;
@@ -643,26 +1267,10 @@ export default function PressPriorityTracker() {
     const exDone = isDoneEff(ex, rx);
     const subbed = !!altChoice[k3(ex.id)];
     const activeName = subbed ? ex.alt : ex.name;
-    const prevNote = week > 1 && week <= 12 ? exNotes[`${week-1}-${day}-${ex.id}`] : null;
+    const prevNote = week > 1 ? exNotes[`${week-1}-${day}-${ex.id}`] : null;
     return (
-      <section className={`card ${ex.wave ? "main" : ""} ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
-        <div className="ex-head">
-          <div className="ex-title">
-            <h2 className="exname">{activeName}</h2>
-            {(subbed || ex.tag) && <div className="tagrow">{subbed && <em className="tag alt-tag">sub</em>}{ex.tag && <em className="tag">{ex.tag}</em>}</div>}
-          </div>
-          <div className="ex-actions">
-            <button className="draghandle" aria-label={`Reorder ${activeName} — drag, or press then use the up and down arrow keys`}
-              onPointerDown={e => startDrag(e, ex.id)} onPointerMove={onDragMove} onPointerUp={endDrag} onPointerCancel={endDrag}
-              onKeyDown={e => { if (e.key === "ArrowUp") { e.preventDefault(); moveEx(ex.id, -1); } else if (e.key === "ArrowDown") { e.preventDefault(); moveEx(ex.id, 1); } }}>
-              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><g fill="currentColor"><circle cx="6" cy="3.5" r="1.35"/><circle cx="10" cy="3.5" r="1.35"/><circle cx="6" cy="8" r="1.35"/><circle cx="10" cy="8" r="1.35"/><circle cx="6" cy="12.5" r="1.35"/><circle cx="10" cy="12.5" r="1.35"/></g></svg>
-            </button>
-            <a className="ytbtn" href={ytUrl(activeName)} target="_blank" rel="noopener noreferrer" aria-label={`Watch a video example of ${activeName} on YouTube`}>
-              <svg viewBox="0 0 28 20" width="26" height="19" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#FF0000"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg>
-            </a>
-            <button className={`donebtn ${exDone ? "on" : ""}`} aria-pressed={exDone} onClick={() => toggleDone(ex, rx)}>✓</button>
-          </div>
-        </div>
+      <section className={`card ${ex.tag === "main lift" ? "main" : ""} ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
+        {cardHead(ex, activeName, exDone, rx)}
         <div className="ex-tools">
           {ex.alt && (
             <button className={`inlbtn ${subbed ? "on" : ""}`} title={subbed ? `Back to ${ex.name}` : `Swap to ${ex.alt}`}
@@ -673,13 +1281,16 @@ export default function PressPriorityTracker() {
         </div>
         <div className="meta-row">
           <div className="rx">
-            <span>{rx.sets}×{rx.repsLabel}</span>
-            {rx.loadLabel && <span className="rx-load"> @ {rx.loadLabel}</span>}
+            <span>{rx.selfDescribing ? rx.repsLabel : `${rx.sets}×${rx.repsLabel}`}</span>
+            {rx.loadLabel && <span className="rx-load">{rx.loadNum != null ? " @ " : " · "}{rx.loadLabel}</span>}
             {rx.pct && <span className="rx-pct"> {rx.pct}%</span>}
           </div>
           {subbed && <span className="alt-note">alt for {ex.name}</span>}
         </div>
-        {ex.wave && (
+        {rx.system && <div className="systemload">Total system load <b>{fmtLb(rx.system)} lb</b> — bodyweight {BW} + {fmtLb(rx.loadNum)} external</div>}
+        {rx.calib && <div className="banner soft">Week 1 calibration: ramp in 5–7.5 lb steps above 105 and stop at the first rep that is strict but no longer crisp. Log it in row C. Take the three prescribed sets at 105 regardless of what the single shows — any rescale needs approval and starts next week.</div>}
+        {rx.gate && <div className="banner soft">{rx.gate}</div>}
+        {ex.tag === "main lift" && (
           <div className="barspeed-row">
             <span className="bs-label">Bar speed</span>
             <div className="barspeed" role="group" aria-label={`${activeName} bar speed`}>
@@ -701,7 +1312,7 @@ export default function PressPriorityTracker() {
                 <span key={i}>{s.w}×{s.r}{i < rx.warmups.length-1 && <span className="arrow"> → </span>}</span>
               ))}
             </div>
-            <div className="plates">Work sets: bar + {rx.plates}</div>
+            {rx.plates && <div className="plates">Work sets: bar + {rx.plates}</div>}
           </div>
         )}
         {prevNote && <div className="lastnote"><b>Last week's note:</b> {prevNote}</div>}
@@ -711,9 +1322,9 @@ export default function PressPriorityTracker() {
         </div>
         {Array.from({ length: total }).map((_, i) => renderSetRow(ex, rx, i))}
         <div className="set-btns">
-          {REST[ex.id] != null
-            ? <button className="ghost timer-btn" onClick={() => startRestById(ex.id)}>⏱ Rest {fmtTime(REST[ex.id])}</button>
-            : <span className="shared-rest">rests inside the superset</span>}
+          {REST[restKey(ex.id)] != null
+            ? <button className="ghost timer-btn" onClick={() => startRestById(ex.id)}>⏱ Rest {fmtTime(REST[restKey(ex.id)])}</button>
+            : <span className="shared-rest">rests inside the lift above</span>}
           <button className="solid" onClick={() => addSet(ex.id)}>＋ Add Set</button>
           {extraCount > 0 && <button className="ghost rm-set" onClick={() => removeSet(ex.id)}>−</button>}
         </div>
@@ -724,38 +1335,80 @@ export default function PressPriorityTracker() {
     );
   };
 
+  /* Week-12 test session. Order is fixed: power before strength, priority before secondary.
+     A grindy single is recorded as a MISS, not as a lower number (§5.13). */
   const renderTestDay = () => {
-    const t = TESTS.find(x => x.id === day);
-    const extra = extraSets[`13-${day}-ladder`] || 0;
-    const totalRows = t.attempts.length + extra;
+    const pre = [
+      "No domain in a red state",
+      "At least two easy days immediately prior — Monday was technique-only, Tuesday's ride was easy",
+      "Normal adductor check Monday evening and this morning",
+      "Bodyweight recorded at the morning weigh-in",
+    ];
+    const totalMin = 14 + TESTS.reduce((a, t) => a + t.minutes, 0);
     return (
       <div>
-        <p className="test-note">{t.note}</p>
-        <section className="card main">
-          <div className="ex-head"><h2>{t.lift}</h2><div className="rx"><span className="rx-load">RPE ≤ 9.5</span></div></div>
-          <div className="grid-head"><span>#</span><span>PLAN</span><span>WT</span><span>REPS</span><span>RPE</span><span /></div>
-          {Array.from({ length: totalRows }).map((_, i) => {
-            const plan = t.attempts[i];
-            const cur = logs?.[13]?.[day]?.ladder?.[i] || {};
-            const rpeWarn = cur.rir != null && cur.rir !== "" && parseFloat(cur.rir) > 9.5;
-            return (
-              <div className="set-row" key={i}>
-                <span className="set-n">{i+1}</span>
-                <span className={`prev ${plan ? "" : "empty"}`}>{plan ? `${plan[0]}×${plan[1]}` : "—"}</span>
-                <input inputMode="decimal" placeholder={plan ? plan[0] : ""} value={cur.w || ""} onChange={e => setEntry("ladder", i, "w", e.target.value)} />
-                <input inputMode="numeric" placeholder={plan ? plan[1] : 1} value={cur.r || ""} onChange={e => setEntry("ladder", i, "r", e.target.value)} />
-                <input inputMode="decimal" placeholder="9" value={cur.rir || ""} className={rpeWarn ? "warn" : ""} onChange={e => setEntry("ladder", i, "rir", e.target.value)} />
-                <span />
+        <div className="cap-note">Test session · warm-up 14 + {TESTS.reduce((a,t)=>a+t.minutes,0)} = {totalMin} min · no supplemental work</div>
+        <div className="focus"><b>Preconditions — all four required</b>
+          <ol className="seqlist">{pre.map((x,i) => <li key={i}>{x}</li>)}</ol>
+        </div>
+        {addFlag && <div className="banner">Adductor check returned abnormal this week. The broad jump is gated on a normal adductor status — resolve it before testing.</div>}
+        {TESTS.map(t => {
+          const extra = extraSets[`${TEST_WEEK}-${day}-${t.id}`] || 0;
+          const rows = t.attempts.length + extra;
+          return (
+            <section className="card main" key={t.id}>
+              <div className="ex-head">
+                <div className="ex-title"><h2 className="exname">{t.lift}</h2>
+                  <div className="tagrow"><em className="tag">test</em><em className="tag">{t.minutes} min</em></div></div>
+                <a className="ytbtn" href={ytUrl(t.lift)} target="_blank" rel="noopener noreferrer" aria-label={`Watch a video example of ${t.lift}`}>
+                  <svg viewBox="0 0 28 20" width="26" height="19" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#FF0000"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg>
+                </a>
               </div>
-            );
-          })}
-          <button className="solid full" onClick={() => addSet("ladder")}>＋ Attempt</button>
-          <div className="tested-row">
-            <label>Tested 1RM</label>
-            <input inputMode="decimal" placeholder={RM[t.rmKey]} value={tested[t.rmKey] || ""} onChange={e => setTested(p => ({ ...p, [t.rmKey]: e.target.value }))} />
-          </div>
-          <p className="cue"><b>Instructions:</b> Next-cycle increments: OHP +2.5–5 · Bench +5 · Squat +5–10 · DL +10. Squat/DL singles optional the following Monday, RPE ≤9.</p>
-        </section>
+              <div className="meta-row"><div className="rx"><span>Target</span><span className="rx-load"> {t.target}</span></div></div>
+              <p className="test-note">{t.note}</p>
+              <div className="grid-head"><span>#</span><span>PLAN</span><span>{t.unit === "in" ? "IN" : "WT"}</span><span>REPS</span><span>RIR</span><span /></div>
+              {Array.from({ length: rows }).map((_, i) => {
+                const plan = t.attempts[i];
+                const cur = logs?.[TEST_WEEK]?.[day]?.[t.id]?.[i] || {};
+                const warn = cur.rir != null && cur.rir !== "" && parseFloat(cur.rir) < 0;
+                return (
+                  <div className="set-row" key={i}>
+                    <span className="set-n">{i+1}</span>
+                    <span className={`prev ${plan ? "" : "empty"}`}>{plan ? `${plan[0]}${t.unit === "in" ? "" : "×" + plan[1]}` : "—"}</span>
+                    <input inputMode="decimal" placeholder={plan ? String(plan[0]) : ""} value={cur.w || ""}
+                      aria-label={`${t.lift} attempt ${i+1} ${t.unit === "in" ? "distance" : "weight"}`}
+                      onChange={e => setEntry(t.id, i, "w", e.target.value)} />
+                    <input inputMode="numeric" placeholder={plan ? String(plan[1]) : 1} value={cur.r || ""}
+                      aria-label={`${t.lift} attempt ${i+1} reps`}
+                      onChange={e => setEntry(t.id, i, "r", e.target.value)} />
+                    <input inputMode="decimal" placeholder="2" value={cur.rir || ""} className={warn ? "warn" : ""}
+                      aria-label={`${t.lift} attempt ${i+1} RIR`}
+                      onChange={e => setEntry(t.id, i, "rir", e.target.value)} />
+                    <span />
+                  </div>
+                );
+              })}
+              <button className="solid full" onClick={() => addSet(t.id)}>＋ Attempt</button>
+              <div className="tested-row">
+                <label htmlFor={`res-${t.id}`}>Result {t.unit === "in" ? "(in)" : "(lb)"}</label>
+                <input id={`res-${t.id}`} inputMode="decimal" placeholder="—" value={tested[t.rmKey] || ""}
+                  aria-label={`${t.lift} result`}
+                  onChange={e => setTested(p => ({ ...p, [t.rmKey]: e.target.value }))} />
+              </div>
+              {t.rmKey === "broad" && tested.broadBase && (
+                <div className="systemload">Week-1 baseline <b>{tested.broadBase} in</b> — target is {parseFloat(tested.broadBase) + 4} in
+                  {tested.broad ? ` · change ${(parseFloat(tested.broad) - parseFloat(tested.broadBase)).toFixed(1)} in` : ""}</div>
+              )}
+            </section>
+          );
+        })}
+        <div className="notes-label">Test session notes</div>
+        <textarea value={notes[sessKey] || ""} placeholder="Bar speed on each single, any rep stopped as grindy, footwear and surface for the jump…"
+          onChange={e => setNotes(p => ({ ...p, [sessKey]: e.target.value }))} />
+        <button className={`finishbtn ${sessDone[sessKey] ? "done-on" : ""}`} onClick={() => setSessDone(p => ({ ...p, [sessKey]: !p[sessKey] }))}>
+          {sessDone[sessKey] ? "✓ TEST SESSION FINISHED" : "FINISH TEST SESSION"}
+        </button>
+        <footer className="foot">No squat or deadlift maxima at any point in this block. Supplemental work this week is technique-only at 4 RIR or easier.</footer>
       </div>
     );
   };
@@ -764,7 +1417,7 @@ export default function PressPriorityTracker() {
     <section className="card settings">
       <div className="ex-head"><h2>Settings</h2><button className="donebtn" onClick={() => setSettingsOpen(false)}>✕</button></div>
       <div className="set-label">Plan name</div>
-      <input className="planname" value={settings.planName ?? ""} placeholder="Press / Priority"
+      <input className="planname" value={settings.planName ?? ""} placeholder="Astra · Concurrent Block"
         onChange={e => setSettings(s => ({ ...s, planName: e.target.value }))} />
       <div className="set-label">Skin</div>
       <div className="swatches">
@@ -808,8 +1461,8 @@ export default function PressPriorityTracker() {
           onClick={() => setSettings(s => ({ ...s, autoRest: !s.autoRest }))}>{settings.autoRest ? "On" : "Off"}</button>
       </div>
       <div className="set-label">Weekly review — for the Claude Code coaching loop</div>
-      <button className="solid full" onClick={() => copyText(buildReviewJSON(week), "AI report (JSON) copied — paste into Claude Code")} disabled={isTest}>Copy AI report (JSON)</button>
-      <button className="solid full" onClick={() => copyText(buildReview(week), "Text report copied")} disabled={isTest} style={{ marginTop: 8 }}>Copy text report</button>
+      <button className="solid full" onClick={() => copyText(buildReviewJSON(week), "AI report (JSON) copied — paste into Claude Code")}>Copy AI report (JSON)</button>
+      <button className="solid full" onClick={() => copyText(buildReview(week), "Text report copied")} style={{ marginTop: 8 }}>Copy text report</button>
       <div className="set-label">Restore from backup</div>
       <textarea placeholder="Paste a backup JSON here…" value={restorePaste} onChange={e => setRestorePaste(e.target.value)} />
       <button className="solid full" onClick={restoreBackup} disabled={!restorePaste.trim()}>Restore</button>
@@ -817,51 +1470,50 @@ export default function PressPriorityTracker() {
   );
 
   /* ── layout ── */
+  const vol = weekVolume(week);
+  const budget = dayData ? dayData.budget : null;
+  const budgetTotal = budget ? budget.warm + budget.pri + budget.acc + budget.fin : 0;
   return (
     <div className="app" style={themeStyle}>
       <style>{css}</style>
       <header className="hdr">
         <div className="hdr-row">
-          <div className="brand">{(settings.planName || "Press / Priority").toUpperCase()}</div>
+          <div className="brand">{(settings.planName || "Astra · Concurrent Block").toUpperCase()}</div>
           <div className={`status s-${status}`}>{toast || (status === "saving" ? "Saving…" : status === "saved" ? "Saved" : status === "error" ? "Not saved" : "")}</div>
         </div>
         <div className="toolbar">
           <button className={`tool ${settingsOpen ? "on" : ""}`} onClick={() => setSettingsOpen(o => !o)}><span className="ic">⚙</span>Settings</button>
           <button className={`tool ${wake ? "on" : ""}`} onClick={toggleWake} aria-pressed={wake}><span className="ic">☀</span>{wake ? "Awake" : "Screen"}</button>
           <button className="tool" onClick={exportBackup}><span className="ic">⬇</span>Backup</button>
-          <button className="tool" onClick={() => copyText(buildReviewJSON(week), "AI report (JSON) copied — paste into Claude Code")} disabled={isTest}><span className="ic">✦</span>AI Analysis</button>
+          <button className="tool" onClick={() => copyText(buildReviewJSON(week), "AI report (JSON) copied — paste into Claude Code")}><span className="ic">✦</span>AI Analysis</button>
         </div>
         <div className="wave" role="tablist" aria-label="Select week">
           {INTENSITY.map((pct, i) => {
             const w = i + 1;
-            const deload = w === 4 || w === 8 || w === 12;
+            const deload = REDUCED.has(w);
             return (
               <button key={w} role="tab" aria-selected={week === w} className={`wave-col ${week === w ? "on" : ""}`}
-                aria-label={`Week ${w}, ${pct}% intensity${BADGE[w] ? ", " + BADGE[w] : ""}`} onClick={() => changeWeek(w)}>
-                <span className={`bar ${deload ? "deload" : ""}`} style={{ height: `${((pct-62)/30)*34 + 8}px` }} />
+                aria-label={`Week ${w}, ${pct}% relative stress${BADGE[w] ? ", " + BADGE[w] : ""}`} onClick={() => changeWeek(w)}>
+                <span className={`bar ${deload ? "deload" : ""} ${w === TEST_WEEK ? "test" : ""}`} style={{ height: `${((pct-55)/42)*34 + 8}px` }} />
                 <span className="wk-num">{w}</span>
               </button>
             );
           })}
-          <button role="tab" aria-selected={week === 13} className={`wave-col ${week === 13 ? "on" : ""}`} aria-label="Week 13, test week" onClick={() => changeWeek(13)}>
-            <span className="bar test" style={{ height: "42px" }} />
-            <span className="wk-num">T</span>
-          </button>
         </div>
         <div className="week-row">
           <button className="step" onClick={() => changeWeek(week-1)} disabled={week === 1} aria-label="Previous week">‹</button>
           <div className="week-title">
-            <div className="wk">{week === 13 ? "TEST WEEK" : `WEEK ${week}`}</div>
-            <div className="blk">{BLOCK(week)}{BADGE[week] && <span className="badge">{BADGE[week]}</span>}</div>
+            <div className="wk">WEEK {week}</div>
+            <div className="blk">{PHASE(week)}{BADGE[week] && <span className="badge">{BADGE[week]}</span>}</div>
           </div>
-          <button className="step" onClick={() => changeWeek(week+1)} disabled={week === 13} aria-label="Next week">›</button>
+          <button className="step" onClick={() => changeWeek(week+1)} disabled={week === 12} aria-label="Next week">›</button>
         </div>
-        <nav className={`tabs ${isTest ? "two" : ""}`}>
-          {(isTest ? TESTS : DAYS).map(d => (
-            <button key={d.id} className={`tab ${day === d.id ? "on" : ""}`} onClick={() => setDay(d.id)}>
+        <nav className="tabs">
+          {DAYS.map(d => (
+            <button key={d.id} className={`tab ${day === d.id ? "on" : ""} ${isTestSession(week, d.id) ? "testtab" : ""}`} onClick={() => setDay(d.id)}>
               {sessDone[`${week}-${d.id}`] && <span className="tab-done">✓</span>}
-              <span className="tab-day">{isTest ? d.tab : WEEKDAYS[dayMap[d.id]]}</span>
-              <span className="tab-lift">{d.lift}</span>
+              <span className="tab-day">{WEEKDAYS[dayMap[d.id]]}</span>
+              <span className="tab-lift">{isTestSession(week, d.id) ? "TEST" : d.lift}</span>
             </button>
           ))}
         </nav>
@@ -871,26 +1523,53 @@ export default function PressPriorityTracker() {
         {settingsOpen && renderSettings()}
         {isTest ? renderTestDay() : (
           <div>
-            <div className="cap-note">60-min working cap · warm-up off the clock · RIR ≥2 · two slow reps end the set</div>
+            <div className="cap-note">
+              75-min cap · {budget.warm} warm-up / {budget.pri} priority / {budget.acc} accessory / {budget.fin} finisher = <b>{budgetTotal} min</b>
+              {" · "}target RIR {TARGET_RIR(week)} · elastic and running sit outside the cap
+            </div>
             {sessionTime[sessKey] && (
               <div className="sessiontime">Workout time <b><SessionClock start={sessionTime[sessKey].start} end={sessionTime[sessKey].end} /></b></div>
             )}
             <div className="focus"><b>Focus</b>{sessionFocus(week, day)}</div>
-            {subTwoCount >= 2 && (
-              <div className="banner"><b>Two-strike rule tripped:</b> {subTwoCount} sub-2-RIR sets this week. Per §9.3, next week runs the deload template. Run AI Analysis for the full review.</div>
+            <div className="ridenote"><b>Cycling</b>{RIDE_NOTE[day]}</div>
+            {addFlag && (
+              <div className="banner alertbanner"><b>Adductor gate is open:</b> an abnormal check was logged this week. Running progressions and tiers 2 and 3 are held until two consecutive normal checks. Movement-altering pain means suspend impact work and get it looked at.</div>
             )}
-            <div className="progress"><b>{doneCount}</b> / {visibleEx.length} exercises done</div>
+            {subTwoCount >= 2 && (
+              <div className="banner"><b>{subTwoCount} sets below the RIR floor of {RIR_FLOOR(week)}.</b> Level 1 signal (§5.14): hold the next scheduled increment, cut the OHP technical exposure first, and run AI Analysis before changing anything else.</div>
+            )}
+            <div className="progress"><b>{doneCount}</b> / {visibleEx.length} items done</div>
+            <details className="volaudit">
+              <summary>Week {week} volume floors{REDUCED.has(week) ? " — waived (deload)" : ""}</summary>
+              <div className="voltable">
+                {[["Compound pressing", vol.press, "16–20", vol.press >= 16 && vol.press <= 20],
+                  ["Vertical pulling", vol.vpull, "8–12", vol.vpull >= 8 && vol.vpull <= 12],
+                  ["Horizontal pulling", vol.hpull, "6", vol.hpull >= 6],
+                  ["Lower-body exposures", vol.lower, "exactly 2", vol.lower === 2],
+                  ["Shoulder-health sessions", vol.shoulder, "3 of 4", vol.shoulder >= 3],
+                  ["Direct ab sessions", vol.abs, "3", vol.abs >= 3],
+                  ["Press : pull", vol.ratio, "≤ 1.30", vol.ratio != null && vol.ratio <= 1.30],
+                ].map(([label, v, floor, ok]) => (
+                  <div className="volrow" key={label}>
+                    <span>{label}</span><b>{v}</b><span className="volfloor">{floor}</span>
+                    {/* A deload waives the volume floors it deliberately undershoots — it does not
+                        waive the structural ones (exposures, shoulder health, abs), which still hold. */}
+                    <span className={ok ? "volok" : REDUCED.has(week) ? "volwaived" : "volbad"}>{ok ? "met" : REDUCED.has(week) ? "waived" : "under"}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
             {order[sessKey] && <button className="resetorder" onClick={resetOrder}>↺ Reset to recommended order</button>}
             <section className="card warmcard">
               <button className="warm-toggle" aria-expanded={warmOpen} onClick={() => setWarmOpen(o => !o)}>
-                <span>General warm-up · 5–8 min · off the clock</span>
+                <span>Warm-up · {budget.warm} min · inside the cap</span>
                 <span className="chev">{warmOpen ? "−" : "+"}</span>
               </button>
-              {warmOpen && <ul className="warm-list">{WARMUP_MENU[day].map((m, i) => <li key={i}>{m}</li>)}</ul>}
+              {warmOpen && <ul className="warm-list">{WARMUP_MENU[day].map((m, i) => <li key={i} className={i === 0 ? "warmreason" : ""}>{m}</li>)}</ul>}
             </section>
             {visibleEx.map(ex => renderCard(ex))}
-            <div className="notes-label">Session notes — shoulder signals, bar speed, tennis legs</div>
-            <textarea value={notes[sessKey] || ""} placeholder="e.g. Last bench double slowed slightly. Dips clean. Legs heavy from Wednesday tennis."
+            <div className="notes-label">Session notes — bar speed, tissue response, anything the coach should see</div>
+            <textarea value={notes[sessKey] || ""} placeholder="e.g. Last OHP double slowed through the sticking region. Dips clean. Adductors quiet after the hill reps."
               onChange={e => setNotes(p => ({ ...p, [sessKey]: e.target.value }))} />
             <button className={`finishbtn ${sessDone[sessKey] ? "done-on" : ""}`} onClick={() => {
               const nowDone = !sessDone[sessKey];
@@ -901,13 +1580,14 @@ export default function PressPriorityTracker() {
             </button>
             {sessDone[sessKey] && (
               <div className="summary">
-                <b>Session summary — </b>{doneCount}/{visibleEx.length} exercises done · {setsLoggedCount()} sets logged
-                {subTwoCount > 0 ? ` · ${subTwoCount} sub-2-RIR set${subTwoCount === 1 ? "" : "s"} this week` : " · all sets at RIR ≥2"}
+                <b>Session summary — </b>{doneCount}/{visibleEx.length} items done · {setsLoggedCount()} sets logged
+                {subTwoCount > 0 ? ` · ${subTwoCount} set${subTwoCount === 1 ? "" : "s"} below the RIR floor this week` : ` · every set at or above the RIR floor of ${RIR_FLOOR(week)}`}
                 {(() => { const b = dayMainE1rm(); return b ? ` · best ${b.name} e1RM ≈ ${b.est} lb` : ""; })()}
-                . {subTwoCount >= 2 ? "Deload template next week per the two-strike rule." : "Clear to run next session as written."}
+                . {addFlag ? "Adductor gate is open — no running or tier progression until it clears."
+                   : subTwoCount >= 2 ? "Hold the next scheduled increment." : "Clear to run the next session as written."}
               </div>
             )}
-            <footer className="foot">Wave: 5s / 3s / 2s / deload · Doubles cap 91% bench, 90% OHP · Grindy double → −5 lb automatically</footer>
+            <footer className="foot">Conflict hierarchy: health → OHP / dip / pull-up → prescribed rides → elastic quality → deadlift maintenance → squat and bench → secondary volume. Elastic work may never cost a priority pressing session.</footer>
           </div>
         )}
       </main>
@@ -954,7 +1634,8 @@ const css = `
 .wave-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;padding:2px 0;min-width:0}
 .bar{width:100%;max-width:24px;border-radius:3px 3px 0 0;background:var(--barBg);transition:background .15s}
 .bar.deload{background:var(--barDim)}
-.bar.test{background:var(--barDim);border:1px solid var(--ok)}
+.bar.test{background:var(--barDim);border:0.5px solid var(--ok)}
+.wave-col .bar.deload.test{border-color:var(--ok)}
 .wave-col.on .bar{background:var(--accent)}
 .wave-col.on .bar.deload{background:var(--slate)}
 .wave-col.on .bar.test{background:var(--ok)}
@@ -1007,7 +1688,11 @@ const css = `
 .donebtn{width:34px;height:34px;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:99px;color:var(--faint);font-size:15px}
 .donebtn.on{border-color:var(--ok);color:var(--ok)}
 .meta-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
-.rx{font-family:'Barlow Condensed';font-weight:600;font-size:19px;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* The block prescribes top sets and back-offs together ("1×5 + 3×5 @ +32.5 lb"), and the
+   primer line is longer still, so this must WRAP at 375px. Individual tokens stay unbroken. */
+.rx{font-family:'Barlow Condensed';font-weight:600;font-size:19px;font-variant-numeric:tabular-nums;white-space:normal;line-height:1.25;min-width:0;max-width:100%}
+.rx>span{white-space:nowrap}
+.primercard .rx,.elasticcard .rx,.sprintcard .rx{font-size:16px}
 .rx-load{color:var(--accent)}
 .rx-pct{color:var(--muted);font-size:13px}
 .rx-off{color:var(--muted);font-size:13px}
@@ -1087,5 +1772,64 @@ const css = `
 .sessiontime b{color:var(--accent);font-size:15px;font-weight:700}
 .sessionclock{font-variant-numeric:tabular-nums}
 .resetorder{display:block;margin:0 auto 12px;color:var(--muted);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;background:none;border:none;text-decoration:underline}
+/* ── Astra block: cut-priority chips, elastic / sprint / primer / adductor cards ── */
+.tag.cut-never{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+.tag.cut-second{color:var(--slate);border-color:color-mix(in srgb,var(--slate) 40%,transparent)}
+.tag.cut-first{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+.systemload{font-size:11.5px;color:var(--muted);padding:8px 0 0;letter-spacing:.02em}
+.systemload b{color:var(--ink);font-family:'Barlow Condensed';font-size:14px;font-variant-numeric:tabular-nums}
+.banner.soft{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--muted);margin:10px 0 0}
+.banner.alertbanner{border-color:var(--warn);border-width:1.5px;color:var(--warn)}
+.ridenote{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--muted);margin-bottom:12px}
+.ridenote b{display:block;font-family:'Barlow Condensed';font-weight:700;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--slate);margin-bottom:3px}
+.seqlist{margin:10px 0 0;padding-left:18px}
+.seqlist li{font-size:12px;color:var(--ink);line-height:1.5;padding:2px 0}
+.warm-list li.warmreason{color:var(--muted);font-style:italic;font-size:11.5px;border-top:none}
+.warm-list li.dropped{color:var(--faint);text-decoration:line-through}
+/* set rows: the top set and the week-1 calibration single read differently from back-offs */
+.set-row.topset .set-n{color:var(--accent);font-weight:700}
+.set-row.topset{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.set-row.calibrow{background:color-mix(in srgb,var(--slate) 10%,transparent)}
+.set-row.calibrow .set-n{color:var(--slate);font-weight:700}
+.rxfill:disabled{opacity:.3}
+/* elastic block */
+.tierrow{border-top:1px solid var(--line);padding:10px 0 2px}
+.tiertop{display:flex;justify-content:space-between;align-items:baseline}
+.tiername{font-family:'Barlow Condensed';font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink)}
+.tiertarget{font-family:'Barlow Condensed';font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);font-variant-numeric:tabular-nums}
+.tierex{font-size:11.5px;color:var(--muted);line-height:1.5;margin:4px 0 8px}
+.tierlog{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.tierlog label{flex:1;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.tierlog input{flex:0 0 72px;text-align:center}
+.tierlog .rxfill{flex:0 0 42px}
+.qrow{display:flex;align-items:center;gap:8px;margin-top:10px}
+.tested-row.baseline{border-top:1px solid var(--line);padding-top:12px}
+/* sprint block */
+.sprintmeta{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 10px;font-size:11.5px;color:var(--muted)}
+.sprintmeta b{color:var(--ink);font-family:'Barlow Condensed';font-size:14px}
+.sprintmeta .ok{color:var(--ok)}
+.sprintmeta .warn-txt{color:var(--warn)}
+/* adductor gate */
+.checkcard.alert{border-color:var(--warn)}
+.checkrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.checklbl{flex:0 0 118px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.checkrow .barspeed{grid-template-columns:repeat(2,1fr)}
+.bs-btn.on.ok{border-color:var(--ok);color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.bs-btn.on.bad{border-color:var(--warn);color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.abnormal{border-top:1px solid var(--warn);margin-top:10px;padding-top:10px}
+.abnormal p{font-size:12px;line-height:1.55;color:var(--ink);margin:0 0 8px}
+.abnormal .escalate{color:var(--warn);font-size:11.5px;line-height:1.55;margin-top:8px}
+/* volume floor audit */
+.volaudit{margin-bottom:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.volaudit summary{padding:10px 12px;font-family:'Barlow Condensed';font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);cursor:pointer}
+.voltable{padding:0 12px 10px}
+.volrow{display:grid;grid-template-columns:1fr 40px 62px 54px;gap:6px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.volrow b{color:var(--ink);font-family:'Barlow Condensed';font-size:14px;text-align:right;font-variant-numeric:tabular-nums}
+.volfloor{text-align:right;font-size:10.5px;color:var(--faint)}
+.volok{color:var(--ok);text-align:right;font-size:10px;letter-spacing:.07em;text-transform:uppercase}
+.volbad{color:var(--warn);text-align:right;font-size:10px;letter-spacing:.07em;text-transform:uppercase}
+.volwaived{color:var(--slate);text-align:right;font-size:10px;letter-spacing:.07em;text-transform:uppercase}
+.tab.testtab .tab-lift{color:var(--accent)}
 @media (prefers-reduced-motion: reduce){.app *{transition:none!important}}
 `;
+

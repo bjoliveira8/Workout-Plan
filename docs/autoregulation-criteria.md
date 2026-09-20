@@ -1,154 +1,145 @@
-# Autoregulation Criteria — Press-Priority Hybrid (the "brain")
+# Autoregulation Criteria — Astra Concurrent Block v2.0-w1 (the "brain")
 
-This is the decision lens the AI coach applies every week. It sits **inside** the
-program's existing rails (`docs/12-week-press-priority-program.md` §9) and adds one new
-capability the athlete approved: **warranted mid-cycle main-lift increases.**
+The decision lens the AI coach applies to each weekly report. It sits **inside** the rails of
+`docs/12-week-concurrent-block.md` and adds nothing the program does not already permit.
 
-Grounded in: Tuchscherer/RTS RPE→%1RM tables, Helms RIR-RPE research, Prilepin's chart,
-velocity-based training, APRE, and the Graves & Baechle 2-for-2 rule. Sources at bottom.
-
----
-
-## The RIR → %1RM spine (the conversion the rules use)
-
-| RIR | RPE | ~ % of 1RM lost per RIR of headroom |
-|---|---|---|
-| 2 (floor) | 8 | — |
-| 3 | 7 | ~2.5–3% |
-| 4 | 6 | ~5% |
-| 5 | 5 | ~7% |
-
-**Key constant:** ~1 RIR ≈ ~2.5–3% of 1RM. This converts "it came in at RIR 4 instead
-of RIR 2" into pounds.
-
-Anchor 1RMs: Bench 215 · OHP 128 · Squat 282 · Deadlift 515.
+Input is the JSON the app's **AI Analysis** button produces (`buildReviewJSON`, version 14).
+Output is the Mode B weekly audit defined in the program's §10.
 
 ---
 
-## Hard rails (checked FIRST, override everything)
+## Order of checks — do not reorder
 
-- **Squat ≤ 225 lb** (absolute, all 12 weeks).
-- **Doubles cap:** bench ≤ 91% (~195) · OHP ≤ 90% (~115).
-- **RIR ≥ 2 floor** on every working set. No grinding, no failure.
-- **Deload weeks 4 & 8** are obeyed literally — no autoregulation up or down.
-- **Protected weeks 3/7/10/11** — no upward changes.
-- Within 1 lb of a cap → weight is frozen; route progress to reps, then sets.
+1. **Adductor gate** (§5.10). If any check this week returned abnormal, resolve it before
+   reading anything else. It outranks every other signal in the block.
+2. **Hard rails.** Caps, the tier-3 gate, the 15% plyometric rule, the sprint ceiling, the
+   deadlift exposure count, the volume floors, the press-to-pull ratio.
+3. **Conflict hierarchy** (§5.1) for anything that competes:
+   health → OHP/dip/pull-up → prescribed TrainerRoad → elastic quality → deadlift maintenance →
+   squat and bench → secondary volume.
+4. **Per-domain readiness** — global, push, pull, lower-body, elastic and running.
+5. **Progression decisions**, one primary variable at a time.
+
+---
+
+## Hard rails (checked first, override everything)
+
+| Rail | Value |
+|---|---|
+| Training load caps | OHP 125 · dip +50 · pull-up +45 · squat 245 · DL 455 · bench 205 |
+| Deadlift | One exposure every 7 days on Monday. 12 exposures. No max test, ever. |
+| Tier 3 plyometrics | Zero before week 5. Never more than 15% above the highest previously tolerated weekly volume in that tier. |
+| Sprint volume | 250 m of quality volume per session, hard ceiling. Hill only through week 6. |
+| Copenhagen | 6–8 reps per side. Long lever not before three clean weeks. |
+| RIR floor | 2 in accumulation, 1 in intensification, 4 in a deload week. |
+| Deloads | Weeks 6 and 12 are obeyed literally — no autoregulation up or down. |
+| Exclusions | Turkish get-up · Bulgarian split squat · barbell RDL · dumbbell row · cable row · cable flye. Never, including as alternatives. |
+| Scope | No nutrition, no ride content, no wearable-derived rules. |
+
+Within 2.5 lb of a cap, the weight is frozen. `test.mjs` enforces every rail above, so a proposed
+`WAVE` edit that breaches one will fail the build rather than ship.
 
 ---
 
 ## The default is NO CHANGE
 
-Autoregulation moves on **signal, not noise.** If a rule does not clear its *full*
-threshold, hold. Specific do-nothing triggers:
+Autoregulation moves on signal, not noise. If a rule does not clear its full threshold, hold.
 
-1. **Single-session overshoot → no change.** One easy week never moves a main lift.
-2. **Mixed signal → no change.** High RIR but slow/grindy bar, or first set easy and last
-   set at the floor → hold. Fast bar speed is a *required* co-signal for any main-lift bump.
-3. **Sport-fatigue flag → no upward change** on the affected pattern (tennis/cycling → legs).
-4. **+1 RIR only → no change.** One RIR is inside the error band of RIR estimation. The
-   trigger is **+2 or more.**
-5. When rules conflict, the more conservative action wins; "hold" beats "increase."
+**Do-nothing triggers.** A single easy or hard session. A mixed signal — high RIR with grindy bar
+speed, or a clean top set with a degraded back-off. Missing data: unknown is unknown, never
+negative. An unusual workload week (travel, an extra ride, a short night). The week after a deload,
+where loads are restorations rather than progressions.
 
----
-
-## Main lifts — the mid-cycle WEIGHT increase (the earned part)
-
-A main-lift weight increase requires **ALL FOUR**:
-
-| Condition | Threshold |
-|---|---|
-| Overshoot | actual RIR ≥ prescribed **+2** (prescribed RIR-2 came in at **RIR 4+**) |
-| Consistency | held on **every** working set, not just the first |
-| Bar speed | tag = **fast** (no grindy reps anywhere in the session) |
-| Repetition | met on **2 consecutive exposures** of that lift (2-for-2 rule) |
-
-**Magnitude (claw back only a slice, land near RIR 3 — never the RIR-2 floor):**
-- **Bench / OHP:** +2.5 lb default (+5 only if RIR 5+ and fast on *both* exposures).
-- **Squat / Deadlift:** +5 lb default (+10 only if RIR 5+ and fast on *both* exposures).
-
-**Nudge vs. re-baseline:**
-- **Nudge (default):** apply the increment to the next exposure of that lift in the block.
-- **Re-baseline (rare):** if the same lift overshoots on 2+ consecutive exposures with a
-  uniformly fast trend, the tested 1RM is stale — raise the e1RM by one increment and
-  re-derive the block's remaining wave loads. **Never** off a single session.
-- **Squat exception:** at the 225 cap, do not add weight — use reps, then sets.
-
-## Main lifts — REPS lever (only when weight is capped)
-
-- At/within one increment of a cap **and** the increase trigger fires → **add 1 rep per set**
-  before any weight, staying inside **Prilepin's optimal volume** for the zone
-  (76–85%: 2–4 reps/set, 10–20 total · 86%+: 1–2 reps/set, 4–10 total).
-
-## Main lifts — SETS lever (last resort)
-
-- Only if at the squat cap, consistently overshooting, and reps already at the Prilepin
-  ceiling → **+1 working set**, max +1 per lift per block, never in protected/deload weeks.
-
-## Main lifts — downward rules (unchanged, override all upward logic)
-
-- Two consecutive slow reps → **end the set**.
-- Grindy double → next set **−5 lb**.
-- Set arrives at **<2 RIR** → **−5 lb**, finish. Twice in a week → **next week = deload**.
-- Tennis-wrecked-legs flag → **no upward move** on squat/DL.
+**Never catch up a missed increment.** A held week is held; the next increment arrives at its next
+scheduled point, same size.
 
 ---
 
-## Accessories (dips, pull-ups, incline DB, KB press) — lower bar
+## Progression — all conditions required
 
-- Every set holds **RIR 3+** across a full session → **+2.5–5 lb next week**
-  (2.5 upper/small, 5 lower/large).
-- APRE bracket on the top set: ≥3 reps over target → +5–10 (large)/+5 (small);
-  1–2 over → +2.5–5; on target → hold; under / any set <RIR 1 → −5 to −10.
-- Run in a rep range (double progression): add reps to top of range, then add load and reset.
+An increment runs only when **every** one of these holds:
+
+- The lift hit all prescribed sets at target-or-easier RIR, **twice** at the current load.
+- Bar speed was graded `fast` or `on-target` on both exposures — never `grindy`.
+- Technique and range of motion held. For dips that means below 90° at the elbow; for pull-ups a
+  full dead hang and collarbone to bar; for squats at or below parallel.
+- No relevant symptoms, and the adductor gate is clear.
+- The week is not a deload week.
+
+Cadence is fixed by §5.6 and is not accelerated by a good week: OHP 2.5 lb every 2 weeks ·
+dip 2.5–5 lb every 2–3 weeks · pull-up 2.5–5 lb every 2–3 weeks · bench 5 lb every 2–3 weeks
+**and only while OHP and dips are intact** · squat 5 lb every 3 weeks or hold · deadlift no
+progression required.
 
 ---
 
-## The coaching panel (run every proposed change past all five)
+## Regression and the fatigue levels (§5.14)
 
-If **any** voice vetoes → drop to the safer action (increase → hold; re-baseline → nudge).
-
-| Coach | Forcing question | Veto |
+| Level | Trigger | Response |
 |---|---|---|
-| **Pavel Tsatsouline** | "Did the bar stay fast and well short of a grind?" | any increase leaving the set at RIR 2 or slower bar speed |
-| **Dan John** | "Real trend, or one good day?" | re-baselining off a single session |
-| **Yuri Verkhoshansky** | "Is total high-intensity dosing still in the envelope?" | volume past Prilepin's optimal total for the zone |
-| **Hatfield / Tuchscherer** | "What did the *bar speed* say vs. the load?" | any increase where the bar was slow/grindy, even if reported RIR was high |
-| **2-for-2 rule (Graves & Baechle)** | "Has the overshoot repeated across two exposures?" | any main-lift weight increase not yet cleared by the 2-exposure test |
+| 0 — normal | Everything on target | Progress or hold as written |
+| 1 — small adjustment | Two sets below the week's RIR floor · one slow session · a minor RIR overshoot | Hold load, remove one low-priority set, extend rest, or delay one progression. **Cut the Monday OHP technical exposure first, every time.** |
+| 2 — affected domain | A whole domain declines for a week — e.g. both lower-body sessions down while upper stays normal | Reduce that domain's work sets 25–35% for the week. Leave other domains at full prescription. No new exercises. |
+| 3 — true deload | Persistent decline across domains, or a Level 2 that does not resolve | 5–7 days at ~half sets, 10–15% lighter, 4 RIR or easier. Remove faster running and tier 3. Recommend easy or skipped rides without touching their content. |
 
-*(McGill and Boyle intentionally excluded from this panel per athlete decision, 2026-07-05.)*
+One poor workout is not a deload. An unscheduled Level 3 does not cancel weeks 6 or 12 unless it
+falls within ten days of one.
 
----
-
-## Worked examples
-
-1. **Bench 5×5 @ RIR2, all sets RIR 4–5, fast — exposure #1.** Trigger conditions met
-   *except* repetition → **NO change; flag "watch bench, pending 2nd exposure."** If next
-   bench session repeats → **+2.5 lb** (+5 if both were RIR 5+ and fast).
-2. **Squat easy at capped 225, 2nd exposure, fast, no leg flag.** Weight blocked by cap →
-   **add 1 rep/set** inside Prilepin (e.g. 4×4 → 4×5), still RIR ≥2.
-3. **Deadlift easy but leg/back fatigue flag present.** Do-nothing rule #3 fires →
-   **NO change**, re-evaluate on a clean exposure.
-4. **Accessory 3×10, all RIR 3+, top set ~13 reps two weeks running.** APRE bracket →
-   **+2.5–5 lb**, reset to 3×8.
+**Late-set decline without pain is fatigue, not intolerance.** For pull-ups the escalation order is:
+longer rest → cluster the last work set (2+2+1, 20 s intra-set) → drop Wednesday's volume sets from
+four to three → reduce the back-off load by 5 lb. Frequency is the last thing touched.
 
 ---
 
-## Weakest assumption (surfaced by design)
+## Reading the new domains
 
-The framework trusts self-reported RIR. RIR is **least accurate in the "felt easy" zone
-(RIR 4–5)** — exactly the zone that triggers increases. That is *why* every main-lift
-increase also requires the **fast bar-speed tag + a 2-session repeat**: bar speed is the
-objective referee that catches an over-optimistic RIR call. A phone bar-speed tool would
-convert the fast/slow tag into a hard number and tighten this considerably.
+**Elastic.** Compare logged contacts against target per tier. Under target with `clean` quality is
+a completed session — the block is quality-gated, not count-gated. Under target with `degraded` or
+`stopped` twice running means hold the tier and do not advance. Over target is a rule breach: the
+15% cap applies to the plan, not to enthusiasm.
+
+**Sprint.** Reps completed below prescription with `crisp` quality is correct execution of the stop
+rules. `laboured` at any point means the next week repeats rather than advances. Metres are capped
+per session and the app shows the ceiling.
+
+**Primer.** `fatiguing` twice running: drop to one round, then drop the press component, then omit
+the primer. It never counts as productive volume and is not worth defending.
+
+**Adductor.** Normal twice — post-session and next morning — is what unlocks the next running or
+tier step. Mild familiar soreness resolving in 24–48 hours without a movement change means hold and
+repeat; it is neither grounds to progress nor grounds to diagnose. Symptoms that increase, persist
+past 48 hours, reduce output, or affect stride mean regress one running step and remove tier 3.
+Acute sharp pain, bruising, weakness, progressive symptoms, or movement-altering discomfort mean
+suspend impact work and recommend clinical evaluation — the only place in this block where that
+language belongs.
 
 ---
 
-## Sources
+## Change authority (§10)
 
-- Tuchscherer / RTS RPE→%1RM & e1RM autoregulation (reactivetrainingsystems.com).
-- Helms, novel RIR-based RPE scale (PubMed 26049792; NSCA SCJ 2016).
-- Prilepin's chart (powerliftingtechnique.com; powerathletehq.com).
-- Velocity-based training / velocity-loss thresholds (sportsmith.co; PMC12360324).
-- APRE — Bryan Mann (evolutionsportspt.com; PubMed 20543732).
-- 2-for-2 rule — Graves & Baechle, *Essentials of Strength & Conditioning*.
-- Pavel Tsatsouline (grease-the-groove, submaximal, bar speed); Dan John (little & often).
+**Proceed without approval:** a scheduled available increment · a hold · one back-off set added or
+removed · small rep changes · longer rest · removing an optional accessory.
+
+**Requires Brian's approval:** replacing a primary lift · changing a primary lift's frequency ·
+more than 15% weekly volume change globally or in one family · any deload, taper, or testing week ·
+faster running or higher-impact progression · any change to the priority hierarchy · any OHP
+rescale after the week-1 calibration single.
+
+**During weeks 1 through 4, present every change for approval.**
+
+Every change states what changed, the supporting observations, confidence, expected outcome, and
+the reversal or progression criteria. Completed history is immutable. Each accepted plan is a new
+version labelled `v2.0-wN` with a diff against the prior version.
+
+---
+
+## Applying an approved change
+
+`WAVE` in `src/App.jsx` is the single edit point for every load. After editing:
+
+```bash
+npm run build && npm test     # invariant guards must pass
+node deploy.mjs               # build + test + stage root index.html
+```
+
+Then show Brian the diff and wait for an explicit yes before `node deploy.mjs --push`.
