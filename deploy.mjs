@@ -1,4 +1,4 @@
-// One-command deploy for the Press/Priority tracker.
+// One-command deploy for the Astra tracker.
 //   node deploy.mjs            → build + test + copy dist/index.html to root, show status (NO push)
 //   node deploy.mjs --push     → same, then commit + push to origin/main (GitHub Pages redeploys)
 // GitHub Pages serves root index.html from main. User training data lives in the phone's
@@ -30,7 +30,7 @@ try {
   }
 
   console.log("→ Committing + pushing…");
-  run("git add index.html src docs test.mjs build.mjs package.json package-lock.json CLAUDE.md README.md deploy.mjs .gitignore");
+  run("git add -A index.html src tools docs test.mjs build.mjs package.json package-lock.json CLAUDE.md README.md deploy.mjs .gitignore");
   const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
   run(`git commit -m "deploy: ${stamp}"`);
   run("git push origin main");
