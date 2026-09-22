@@ -1,29 +1,30 @@
-# Autoregulation criteria — Astra Synthesized Concurrent Block v3.0-syn1
+# Autoregulation criteria — Astra Synthesized Concurrent Block v4.0-syn2
 
 The decision lens for the weekly review. Brian taps **AI Analysis** in the tracker, which
 copies a structured week report to the clipboard, and pastes it into Claude Code. This
 document is what that review is judged against; the block itself is
-[docs/12-week-concurrent-block-v3.md](12-week-concurrent-block-v3.md), and where the two
+[docs/12-week-concurrent-block-v4.md](12-week-concurrent-block-v4.md), and where the two
 ever disagree, **the block wins**.
 
-Everything here is drawn from §17 of the block. Nothing is invented for the app.
+Everything here is drawn from §14, §17, §18 and §20 of the block. Nothing is invented for
+the app.
 
 ---
 
 ## 0. What the review may and may not do
 
 **May, without asking:** adjust a load within the printed rules; hold a progression; remove
-a back-off set; reduce an affected family's sets; propose moving, easing or skipping a ride.
+an affected final set; reduce an affected family's sets; apply a printed fallback; propose
+moving, easing or skipping a ride.
 
-**Requires Brian's explicit approval first:** replacing a primary lift (OHP, dip, pull-up,
-low-bar squat, conventional deadlift); changing the grip on the primary pull-up; changing
-any frequency; any weekly change over 15% to a movement family or to global volume; an
-unplanned deload, taper or test; advancing to higher-impact or faster running; changing the
-conflict hierarchy; and rescaling the OHP target.
+**Requires Brian's explicit approval first:** replacing a primary lift; changing any
+frequency; an upward impact, running or power dose change; rescaling a target; a new test
+schedule; an unplanned deload or taper; and any novel substitute not printed on the card.
 
 **Never, under any circumstances:** prescribing nutrition; writing TrainerRoad ride content
-(intervals, duration, power); inventing wearable-derived rules (HRV, sleep scores,
-readiness numbers); or advancing impact or running to compensate for a missed ride.
+(intervals, duration, power); inventing wearable-derived readiness scores or a numeric
+readiness formula; advancing impact or running to compensate for a missed ride; or
+retrospectively labelling a missed floor compliant.
 
 Symptom-driven stopping never waits for approval of any kind.
 
@@ -36,11 +37,11 @@ wins and the lower one is cut.
 
 1. **Tissue tolerance** — symptoms, the adductor gate, anything that alters movement
 2. **OHP, dip, pull-up** — the three priority lifts
-3. **Prescribed TrainerRoad** — completing the three scheduled rides
+3. **Prescribed TrainerRoad** — completing the scheduled rides
 4. **Elastic and acceleration quality** — jumps and runs done well, or not at all
 5. **Heavy conventional specificity** — the Monday deadlift double
 6. **Squat and bench** — secondary strength
-7. **Secondary volume** — arms, delts, carries, rotation
+7. **Secondary volume** — biceps, carries, added legs, rotation
 
 ---
 
@@ -50,29 +51,38 @@ Judged on the **first work set** of an exercise, against its own prescribed rese
 
 | What happened | What to do |
 |---|---|
-| One RIR harder than prescribed | OHP / dip / pull-up **−2.5 lb**; bench / squat **−5 lb**; deadlift **−10 lb** |
-| Two or more RIR harder | Twice those reductions, and remove the final affected back-off set if needed |
-| Normal or crisp at target-or-easier reserve, normal next-day tissue response | Take the planned small progression |
+| About 1 RIR harder than prescribed | OHP / dip / pull-up **−2.5 lb**; bench / squat **−5 lb**; deadlift **−10 lb** |
+| 2 or more RIR harder | Double that reduction, and remove an affected final back-off if needed |
+| Comparable successful technique and reserve, normal tissue response | Take the planned increment |
 | Anything else | Hold |
 
-Do not repeatedly grind. A single poor workout does not trigger a deload.
+No grinders, no missed-increment catch-up, no forced depth. **No automatic load increase
+occurs simply because a new week begins.**
 
 The tracker flags any logged set below the week's reserve floor — **2** in a normal week
-(C08 sets the success standard at ≥2 RIR, aiming for 2), **4** in weeks 6 and 12. Two flags
-in a week is the signal to hold, not to push through.
+(C08: ≥2 RIR, aiming for 2; easier qualifies), **4** in weeks 6 and 12.
 
 ---
 
-## 3. Response levels
+## 3. Domain review and response levels
+
+Run a short domain review — global recovery, push, pull, lower, elastic, running:
+
+- **Normal** — comparable performance, ordinary symptoms.
+- **Caution** — unusual fatigue or decline, or familiar mild soreness.
+- **Stop the affected work** — a §14 symptom trigger, or performance and technique that
+  cannot stay inside the prescribed reserve.
+
+**No wearable scores and no manufactured numeric readiness formula.**
 
 | Level | What it looks like | Response |
 |---|---|---|
-| **1** | An isolated poor exposure, or ordinary short-lived fatigue | Hold the progression. Remove one affected back-off if needed. Nothing else changes. |
-| **2** | Repeated decline in the same domain, or accumulating symptoms | Reduce that family's sets by roughly **25–35%**, preserve safe frequency, and find the cause. Do **not** deload unaffected upper work just because both lower days declined. |
-| **3** | Persistent multi-domain decline, clear recovery deterioration, or substantial symptoms | Propose **5–7 easy days** at roughly half sets, ≥4 RIR, no fast or high-impact work. Rides may be moved, made easy or skipped. |
+| **1** | One poor exposure | Hold the progression; reduce an affected final set if needed. |
+| **2** | Repeated comparable decline, or accumulating local fatigue | Reduce that family's sets **25–35%**, preserving safe familiar frequency. Review the ride / impact / new-accessory overlap. If only the lower days declined, do **not** automatically deload healthy upper priorities. |
+| **3** | Persistent multi-domain decline or substantial symptoms | Review **5–7 easy days** at roughly half sets and ≥4 RIR, with no high or fast impact. |
 
-An unscheduled deload replaces a scheduled one **only** if it falls within ten days of it
-and that is reviewed. Otherwise reassess rather than stacking assumptions.
+An unscheduled deload replaces the scheduled one **only** when it falls within ten days and
+is reviewed.
 
 ---
 
@@ -87,51 +97,72 @@ Logged twice per impact day: after the session, and the next morning.
 | Acute sharp pain, bruising, weakness, progressive symptoms, **or movement-altering discomfort on its own** | Suspend the affected impact and seek clinical evaluation. **Do not wait for a second warning sign.** |
 
 An abnormal check raises a block-level banner in the app and holds every running and
-high-tier progression until it clears. Avoid aggressive pre-run static stretching.
+high-tier progression until it clears.
 
 ---
 
 ## 5. Progression gates that are not about how it felt
 
-These are the rails. They cannot be satisfied by a good week alone.
+These are the rails. A good week alone does not satisfy them.
 
-- **Running.** Two *actually completed, tolerated* runs at the current terrain, distance,
-  reps and effort, with a normal next day, before any advance. A reduced two-rep session
-  does not qualify three reps. Deload technique work is not a qualifying exposure. If a
-  stage is held or skipped, later stages move back or disappear — never catch up.
-  Terrain is the only planned change at flat entry; distance, reps and effort hold.
-- **High-tier jumps.** Entry at week 5 requires two completed, tolerated lower-tier
-  exposures with normal next mornings, stable landing control, and no residual ride or
-  lifting fatigue. **A date is not clearance.** Week 7 restores at most the dose actually
-  tolerated in week 5 — if week 5's high work never happened, week 7 cannot "restore" it.
-  After symptoms, begin below the provoking dose and rebuild.
-- **Copenhagen.** Short lever throughout this block. The long lever is optional, only after
-  at least three clean weeks, and only after separate review. Elapsed time is not a reason.
-- **OHP.** Progress only after comparable successful work at target-or-easier reserve, with
-  normal crisp speed and clean tissue response. There is no stall allowance that guarantees
-  125. Hold the last successful load and delete the catch-up step; the target stays an
-  aspiration. A reported calibration figure does not authorise a rescale.
+- **Impact and running.** Two *actually tolerated* exposures of the same relevant mode and
+  stage, with normal next mornings. Running exposures and jump exposures are **separate**.
+  Deload technique work does not qualify a higher stage; after a deload, restore only a dose
+  actually tolerated before it. Outside the approved test, first-entry and post-deload
+  restoration exceptions, keep any weekly increase **≤15%** against the last completed
+  comparable normal week, rounded down. Small high-tier totals usually mean hold. A time or
+  symptom cut does **not** authorise a larger dose next week, and extra Friday time is not a
+  reason to add a faster stage.
+- **Power.** Two comparable crisp exposures and a normal next-day response, then the
+  **smallest** suitable load step at the next normal occurrence. Hold when that increment is
+  too large. **Do not raise power load and leg-accessory load or impact stage in the same
+  week.** Stop at visible slowing, an unstable rack or landing, an arm-dominant clean, local
+  fatigue, or deterioration of the next main-lift ramp — a stopped movement is logged as
+  **omitted**, not completed.
+- **Biceps.** 2×8–12 at 3 RIR. Add reps while preserving ROM and reserve; once **both** sets
+  reach 12, take the smallest load step and return toward 8. Compare only the same implement
+  and setting, and only against the last **normal** appearance — a deload appearance neither
+  qualifies an increase nor resets the record.
+- **Core.** Keep the printed variation for its three-week block. After two comparable
+  successful exposures, improve ROM *or* take the smallest load step — never both, and never
+  by adding sets.
+- **Copenhagen.** Short lever throughout. The long lever is not an automatic progression.
+- **Pull-ups (weeks 7–11).** The longer first Monday set practises five-rep readiness.
+  Nominal loads yield to actual prior success; week 11 may run 4–5 reps.
 
 ---
 
 ## 6. Time
 
-The budget is planned, not measured. An **actual 82-minute session is a failed time
-constraint**, not a passed budget. The next session removes lower-priority work *before*
-starting, using the measured overrun. A repeated hard-floor shortfall triggers redesign and
-review — never a claim that the nominal budget passed. Protect full recovery and stop at 75.
+**Strength time is a guideline in this block, not a hard cap** — that was an explicit
+instruction. An **82-minute session is above the suggestion, not automatically a failure**:
+log why, retain full rests, and decide whether the extra time is sustainable. Trim optional
+work if workday practicality suffers. Week-12 Friday is **94 minutes by design**.
 
-The design-time cut order: optional unilateral leg work → secondary incline/landmine → one
-arm/delt set → one carry set → one row set → secondary bench. The first two are absent from
-this block. Copenhagen is protected prophylactic work and is **not** the optional leg
-accessory in that order. Shoulder work is protected to the end, with symptoms overriding
-every label.
+**Impact is a hard, separate limit: Wednesday 15 minutes, Friday 30, including actual
+transit.** Compare your real transit and setup against the full prescription *before*
+starting work. The fullest Wednesday leaves only **65 seconds** for travel, so that is the
+session that will bind first. Use the card's printed cut order; log the smaller actual dose.
+A reduced dose never qualifies a larger one.
 
-Removing one pull or row set takes the ratio to 18/14 = 1.286 — still under 1.30, but a row
-cut breaches the six-row floor and needs a stated waiver. Removing two pulling sets gives
-18/13 = 1.385; reduce pressing to at most 16, giving 16/13 = 1.231. **Never add fatigued
-pulling to fix a ratio.** Because bench is on Sunday, anticipated cuts should be planned
-before it.
+If protected work repeatedly exceeds the real available window, **revise the program rather
+than manipulating the clock.**
+
+### Cut order by day
+
+- **Sunday** — final biceps set → carry → a row set (row-floor waiver) → secondary bench.
+  Protect dip and shoulder work. Sunday power stays easy on the legs after the long ride.
+- **Monday** — added lunge dose first, then a Pallof set. Do **not** relabel Copenhagen as
+  the additional accessory. Preserve pull-up, deadlift and the second OHP exposure.
+- **Wednesday** — final biceps set → carry → a row set (row-floor waiver). Protect OHP,
+  pull-ups and shoulder work. Stop or regress throws if they impair OHP.
+- **Friday** — added single-leg hinge first, then reduce non-essential remaining work. More
+  available time is for preparation and recovery, **not bonus sets**.
+
+One lost pulling set gives 18/14 = 1.286, but a row cut breaks the six-row floor. Two lost
+pulling sets give 18/13 = 1.385 — prospectively reduce secondary pressing to ≤16, giving
+16/13 = 1.231. If pressing is already done, **report the actual missed ratio**; never add
+fatigued pulling and never rewrite history. Saturday stays rest.
 
 ---
 
@@ -139,33 +170,50 @@ before it.
 
 1. **The response level** (none / 1 / 2 / 3) with the evidence for it — which sessions,
    which numbers, which symptoms.
-2. **Each prescription to change next week**, with the reversal condition stated: what
-   would make you put it back.
+2. **Each prescription to change next week**, with the reversal condition stated.
 3. **Anything that must be held** rather than advanced, and why the gate is not met.
 4. Plain language. Brian is not a developer and should not have to decode the report.
 
-Record each change with the observation behind it, the confidence, the expected effect,
-and the progression or reversal condition. Preserve completed history; create a new version
-for accepted revisions. Track readiness from performance, symptoms, the sleep and recovery
-report, and actual workload — never from invented scores.
-
-A sustained bodyweight or recovery deterioration may warrant flagging an energy-availability
-review. It does not license a nutrition program, which is out of scope for this block.
+Track actual history. Ramps, power, shoulder work and core do **not** inflate the pressing
+and pulling floors — the report marks each row with `countsTowardFloors` for exactly this
+reason. A fallback is not evidence of ballistic adaptation.
 
 ---
 
-## 8. Applying an accepted change
+## 8. Week-12 and the week-13 contingency
 
-Edit `src/program.js` — it is the single edit point for every prescription, the role `WAVE`
-played in the previous block. Then:
+Testing requires the preceding Wednesday and Thursday to be genuinely easy, no red readiness
+domain, and normal adductor and gait status. Broad jump first, then OHP → dip → pull-up with
+**ten minutes** between each.
+
+Readiness singles must be strict and crisp at roughly RPE ≤7 — they permit *consideration*
+of a target, not a claim of success. One target set per lift. Stop before a grinder or an
+invalid rep and **do not retry**. Success requires the prescribed reps and load, the
+technique, and ≥2 RIR.
+
+Meaningful fatigue from an earlier test **defers** the later one to week 13. If unready for a
+target but easy movement is still suitable, substitute one easy set — OHP 95×3, dip +15×3,
+pull-up BW×3 at ≥4 RIR — and no extra back-offs.
+
+**Week 13 is for deferred measurements only.** Skip any target already completed, and any
+attempted and missed or ground out. It is not a retry and not a thirteenth training week;
+there is no thirteenth deadlift. If several deferred tests cannot all be obtained validly,
+leave the outstanding result **unverified**. A week-13 result is labelled week 13, with the
+actual elapsed weeks recorded, and never becomes a week-12 achievement.
+
+---
+
+## 9. Applying an accepted change
+
+Edit `src/program.js` — it is the single edit point for every prescription. Then:
 
 ```bash
 cd "/Users/brianoliveira/Desktop/Claude Code Projects/Workout Plan" && npm run build && npm test
 ```
 
-`test.mjs` enforces the block's caps, floors, ceilings and gates, so an autoregulation edit
-cannot silently breach it. Read the build output — a failed build leaves the previous bundle
-in place, and the stale-build guard will refuse to run the suite against it.
+`test.mjs` enforces the block's floors, ceilings and gates, so an autoregulation edit cannot
+silently breach it. Read the build output — a failed build leaves the previous bundle in
+place, and the stale-build guard will refuse to run the suite against it.
 
 Do **not** re-run `tools/gen-program.mjs` to apply a weekly change; it regenerates from the
 source plan and would discard every accepted edit. It is only for loading a genuinely new
