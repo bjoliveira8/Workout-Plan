@@ -212,7 +212,6 @@ if (doc.querySelector(".sprintcard")) fail.push("running-on-wednesday");
 tab("FRI").click();
 await wait(150);
 if (!out().includes("Low-bar squat")) fail.push("fri-squat-missing");
-if (!out().includes("Broad-jump BASELINE")) fail.push("w1-baseline-input-missing");
 if (doc.querySelector(".sprintcard")) fail.push("running-in-week-1");
 
 // 8.8) Friday week 5 runs the hill block with the ceiling shown.
@@ -231,7 +230,7 @@ if (out().includes("target test")) fail.push("tests-on-wednesday");
 tab("FRI").click();
 await wait(200);
 for (const p of ["Strict OHP target test", "Weighted dip target test", "Neutral-grip pull-up target test",
-                 "Broad-jump RESULT", "No retries"])
+                 "No retries"])
   if (!out().includes(p)) fail.push("testweek:" + p);
 if (!doc.querySelector(".tab.testtab")) fail.push("test-tab-not-marked");
 
@@ -353,8 +352,9 @@ else {
   week(1).click(); await wait(90);
   for (const [d, want] of [["SUN", true], ["MON", false], ["WED", true], ["FRI", false]]) {
     tab(d).click(); await wait(140);
-    const hasCurl = [...doc.querySelectorAll(".exname")].some((e) => /curl/i.test(e.textContent));
-    if (hasCurl !== want) fail.push(`biceps-day:${d}=${hasCurl}`);
+    const hasBiceps = [...doc.querySelectorAll(".session .card")].some(
+      (c) => [...c.querySelectorAll(".tag")].some((t) => t.textContent.trim() === "biceps"));
+    if (hasBiceps !== want) fail.push(`biceps-day:${d}=${hasBiceps}`);
     if ([...doc.querySelectorAll(".exname")].some((e) => /press-?down|triceps/i.test(e.textContent)))
       fail.push(`direct-triceps-rendered:${d}`);
   }
@@ -457,7 +457,9 @@ else {
     if (a.shoulder < 3) fail.push(`shoulder-days:w${w}=${a.shoulder}`);
     if (a.abs < 4) fail.push(`abs-days:w${w}=${a.abs}`);
     if (a.adductor !== 2) fail.push(`adductor-days:w${w}=${a.adductor}`);
-    if (a.powerDays !== 4) fail.push(`power-days:w${w}=${a.powerDays}`);
+    // Week 12 Friday carries no power work: the session is three maximal tests.
+    const wantPower = w === 12 ? 3 : 4;
+    if (a.powerDays !== wantPower) fail.push(`power-days:w${w}=${a.powerDays}, want ${wantPower}`);
     if (a.unilateral !== 4) fail.push(`unilateral-days:w${w}=${a.unilateral}`);
     if (a.patterns.length !== 2) fail.push(`dynamic-patterns:w${w}=${a.patterns.length}`);
   }
@@ -524,9 +526,7 @@ else {
     if (wed.capSeconds !== META.impactCapMinutes.wed * 60) fail.push(`wed-cap:w${w}=${wed.capSeconds}`);
     if (fri.capSeconds !== META.impactCapMinutes.fri * 60) fail.push(`fri-cap:w${w}=${fri.capSeconds}`);
     const high = wed.high + fri.high;
-    const isMeasure = wed.test || fri.test;
-    if (!isMeasure && high > META.highContactCap) fail.push(`high-contacts:w${w}=${high}`);
-    if (isMeasure && high > 3) fail.push(`measurement-contacts:w${w}=${high}`);
+    if (high > META.highContactCap) fail.push(`high-contacts:w${w}=${high}`);
     // The prescribed work must fit inside the cap with travel left over.
     for (const [lbl, im] of [["wed", wed], ["fri", fri]]) {
       if (im.baseSeconds > im.capSeconds) fail.push(`impact-over-cap:w${w}-${lbl}`);
@@ -535,12 +535,22 @@ else {
       if (evSum !== im.baseSeconds) fail.push(`impact-event-sum:w${w}-${lbl}=${evSum}!=${im.baseSeconds}`);
     }
   }
-  for (const w of [2, 3, 4, 6]) {
+  // High tier is absent before week 5 — including week 1, which used to carry the
+  // broad-jump measurement under the C03 exception. That measurement was withdrawn
+  // (amendment A3), so NO impact session is a test and the cap binds everywhere.
+  for (const w of [1, 2, 3, 4, 6]) {
     const high = IMPACT[w].wed.high + IMPACT[w].fri.high;
     if (high > 0) fail.push(`high-tier-too-early:w${w}=${high}`);
   }
   if (IMPACT[6].wed.moderate + IMPACT[6].fri.moderate > 0) fail.push("deload-w6-not-low-only");
-  if (!IMPACT[1].fri.test || !IMPACT[12].fri.test) fail.push("measurement-weeks-not-flagged");
+  for (let w = 1; w <= 12; w++) for (const d of ["wed", "fri"])
+    if (IMPACT[w][d].test) fail.push(`measurement-session-remains:w${w}-${d}`);
+  if (META.targets.broad) fail.push("broad-jump-target-still-present");
+  // ...and the training jumps DO remain, weeks 5 and 7-11.
+  for (const w of [5, 7, 8, 9, 10, 11])
+    if (!find(w, "fri", "broadpower")) fail.push(`training-jump-missing:w${w}`);
+  for (const w of [1, 12])
+    if (find(w, "fri", "broadpower")) fail.push(`maximal-jump-remains:w${w}`);
 
   // Running (§13): Friday only; none in weeks 1 and 12; hill through week 8; flat only
   // from week 9; never over 60 acceleration or 120 total metres in a session.
@@ -577,10 +587,9 @@ else {
     const blockSum = s.blocks.reduce((a, b) => a + b.seconds, 0);
     if (blockSum !== s.seconds) fail.push(`block-sum:w${w}-${d}=${blockSum}!=${s.seconds}`);
     if (Math.abs(s.seconds / 60 - s.minutes) > 0.01) fail.push(`minutes:w${w}-${d}`);
-    const over = s.minutes > META.strengthGuidelineMinutes;
     const isTestSession = w === 12 && d === "fri";
-    if (over && !isTestSession) fail.push(`over-guideline:w${w}-${d}=${s.minutes}`);
-    if (isTestSession && s.minutes !== 94) fail.push(`w12-fri-minutes=${s.minutes}`);
+    if (isTestSession) { if (s.minutes !== 94) fail.push(`w12-fri-minutes=${s.minutes}`); }
+    else if (s.minutes > META.strengthCeilingMinutes) fail.push(`over-ceiling:w${w}-${d}=${s.minutes}`);
   }
 
   // Week 13 (§18): an optional deferred-test slot. Not one of the 48, no deadlift, and
@@ -598,9 +607,49 @@ else {
   if (recov.length !== 2) fail.push("w12-recovery-blocks=" + recov.length);
   for (const b of recov) if (b.seconds !== 600) fail.push(`w12-recovery-short:${b.name}=${b.seconds}`);
 
+  // Amendment A2 — the dip six-rep ladder must climb in even 2.5 lb steps all the way
+  // into the test. Week 11 was 3x5 @ +47.5, which left the last SIX-rep exposure at
+  // +45 two weeks out and made the test a +5 step where every other step was +2.5.
+  {
+    const sixes = [];
+    for (let w = 1; w <= 11; w++) {
+      const b = find(w, "sun", "dipback");
+      if (b && b.repsNum === 6) sixes.push(b.load);
+    }
+    const last = sixes[sixes.length - 1];
+    if (last !== 47.5) fail.push(`dip-last-six=${last}, want 47.5`);
+    if (tDip.load - last !== 2.5) fail.push(`dip-final-step=${tDip.load - last}, want 2.5`);
+    for (let i = 1; i < sixes.length; i++) {
+      const step = sixes[i] - sixes[i - 1];
+      if (step !== 0 && step !== 2.5) fail.push(`dip-uneven-step:${sixes[i-1]}->${sixes[i]}`);
+    }
+  }
+
+  // Amendment A1 — plantarflexor and hamstring work on BOTH lower days, every week.
+  // The block prescribes 40-60 pogo contacts a week plus accelerations; the calf had
+  // no direct work at all and the hamstring twelve reps, against thirty-six for the
+  // adductor. The test session is the one exception: nothing goes in front of it.
+  for (let w = 1; w <= 12; w++) {
+    for (const d of ["mon", "fri"]) {
+      const isTestDay = w === 12 && d === "fri";
+      const calf = find(w, d, "calf");
+      if (!calf && !isTestDay) fail.push(`calf-missing:w${w}-${d}`);
+      if (calf && isTestDay) fail.push(`calf-on-test-day`);
+      if (calf && calf.workSet) fail.push(`calf-counts-as-work-set:w${w}-${d}`);
+    }
+    // knee-flexion on Monday (the deadlift trains hip extension, not knee flexion)
+    const lc = find(w, "mon", "legcurl");
+    if (!lc) fail.push(`hamstring-missing:w${w}-mon`);
+    else if (lc.sets !== (w === 6 || w === 12 ? 1 : 2)) fail.push(`hamstring-sets:w${w}-mon=${lc.sets}`);
+    // hip-extension on Friday, at a dose that can actually protect the tissue
+    const sl = find(w, "fri", "slrdl");
+    if (!sl) fail.push(`slrdl-missing:w${w}`);
+    else if (!(w === 6 || w === 12) && sl.sets !== 2) fail.push(`slrdl-sets:w${w}=${sl.sets}`);
+  }
+
   // Fresh-slot ordering: one heavy pressing priority per session, in the freshest slot.
   if (SESSIONS[1].wed.items.findIndex((i) => i.id === "ohptop") < 0) fail.push("wed-no-ohp-priority");
-  if (SESSIONS[1].fri.items[0].id !== "broadpower") fail.push("fri-jump-not-first");
+  if (SESSIONS[1].fri.items[0].id !== "dblclean") fail.push("fri-power-not-first");
   if (find(1, "sun", "dipheavy") == null) fail.push("sun-fresh-dip");
 
   // Excluded exercises must not appear anywhere — prescriptions, alts or fallback text.

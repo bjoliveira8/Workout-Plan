@@ -99,7 +99,8 @@ const WEEKDAYS = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
 /* ── Impact ledger (§12) ────────────────────────────────────────────────────────────
    Three tiers, counted as landings. One bilateral landing is one contact. The high tier
    is capped at six TRAINING contacts a week and is absent before week 5; weeks 1 and 12
-   carry three maximal broad-jump attempts as the approved measurement exception (C03).
+   is capped at six training contacts a week and is absent before week 5. The broad-jump
+   MEASUREMENT was withdrawn after review; the training jumps in weeks 5 and 7–11 remain.
 
    Each impact day has its own clock, which starts BEFORE travel, and its own hard cap:
    Wednesday 15 minutes, Friday 30. The cap is on the clock, not on the contacts.      */
@@ -336,7 +337,7 @@ export default function ConcurrentBlockTracker() {
   const [altChoice, setAltChoice] = useState({});
   const [done, setDone] = useState({});
   const [sessDone, setSessDone] = useState({});
-  const [tested, setTested] = useState({ ohp:"", dip:"", pullup:"", broad:"", broadBase:"" });
+  const [tested, setTested] = useState({ ohp:"", dip:"", pullup:"" });
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [restorePaste, setRestorePaste] = useState("");
@@ -414,7 +415,7 @@ export default function ConcurrentBlockTracker() {
           Object.entries(d.altChoice || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== false) ac[k] = true; });
           setAltChoice(ac);
           setDone(d.done || {}); setSessDone(d.sessDone || {});
-          setTested({ ohp:"", dip:"", pullup:"", broad:"", broadBase:"", ...(d.tested || {}) });
+          setTested({ ohp:"", dip:"", pullup:"", ...(d.tested || {}) });
           setOrder(d.order || {}); setBarSpeed(d.barSpeed || {}); setSessionTime(d.sessionTime || {});
           setElastic(d.elastic || {}); setElasticQ(d.elasticQ || {}); setSprintLog(d.sprintLog || {});
           setPowerQual(d.powerQual || {}); setAddCheck(d.addCheck || {});
@@ -576,7 +577,7 @@ export default function ConcurrentBlockTracker() {
       Object.entries(d.altChoice || {}).forEach(([k, v]) => { if (v) ac[k] = true; });
       setAltChoice(ac);
       setDone(d.done||{}); setSessDone(d.sessDone||{});
-      setTested({ ohp:"", dip:"", pullup:"", broad:"", broadBase:"", ...(d.tested||{}) });
+      setTested({ ohp:"", dip:"", pullup:"", ...(d.tested||{}) });
       setOrder(d.order||{}); setBarSpeed(d.barSpeed||{}); setSessionTime(d.sessionTime||{});
       setElastic(d.elastic||{}); setElasticQ(d.elasticQ||{}); setSprintLog(d.sprintLog||{});
       setPowerQual(d.powerQual||{}); setAddCheck(d.addCheck||{}); setArchived(asArchiveList(d.archived));
@@ -595,7 +596,7 @@ export default function ConcurrentBlockTracker() {
   const buildReview = (w) => {
     const L = [], vol = weekVolume(w);
     L.push(`WEEK ${w} TRAINING LOG — ${META.planName} ${BLOCK_VERSION} (${PHASE(w)}${BADGE[w] ? " · " + BADGE[w] : ""})`);
-    L.push(`Rules of record: conflict hierarchy = tissue tolerance > OHP/dip/pull-up > prescribed TrainerRoad > elastic and acceleration quality > heavy conventional specificity > squat/bench > secondary volume. Success reserve is >= 2 RIR, aiming for 2 — easier qualifies. Targets: OHP ${META.targets.ohp}, dip ${META.targets.dip}, pull-up ${META.targets.pullup}, broad jump ${META.targets.broad}.`);
+    L.push(`Rules of record: conflict hierarchy = tissue tolerance > OHP/dip/pull-up > prescribed TrainerRoad > elastic and acceleration quality > heavy conventional specificity > squat/bench > secondary volume. Success reserve is >= 2 RIR, aiming for 2 — easier qualifies. Targets: OHP ${META.targets.ohp}, dip ${META.targets.dip}, pull-up ${META.targets.pullup}.`);
     L.push("");
     DAYS.forEach(d => {
       const ses = sessionFor(w, d.id);
@@ -645,7 +646,7 @@ export default function ConcurrentBlockTracker() {
     const s2 = weekBelowFloor(w);
     const waived = REDUCED.has(w);
     L.push(`VOLUME AUDIT (prescribed work sets): pressing ${vol.press} (floor ${FLOORS.press})${waived ? " — waived, reduced week" : ""} · vertical pull ${vol.vpull} (${FLOORS.vertical})${waived ? " — waived" : ""} · horizontal pull ${vol.hpull} (${FLOORS.horizontal})${waived ? " — waived" : ""} · direct biceps ${vol.biceps} sets (${FLOORS.biceps})${waived ? " — waived" : ""} · lower-body days ${vol.lower} (exactly 2) · shoulder days ${vol.shoulder} (${FLOORS.shoulder}) · direct-abs days ${vol.abs} (${FLOORS.abs}) · power days ${vol.powerDays} (${FLOORS.power}) · unilateral days ${vol.unilateral} (${FLOORS.unilateral}) · adductor days ${vol.adductor} (2) · carry days ${vol.carry} (${FLOORS.carry}, flexible) · press:pull ${vol.ratio} (max ${FLOORS.ratioMax}). Ramps, power, shoulder and core work are real training but do not count toward the pressing and pulling floors.`);
-    if (w === TEST_WEEK) L.push(`TEST RESULTS: broad jump baseline ${tested.broadBase || "—"} in → ${tested.broad || "—"} in · OHP ${tested.ohp || "—"} · dip ${tested.dip || "—"} · pull-up ${tested.pullup || "—"}.`);
+    if (w === TEST_WEEK) L.push(`TEST RESULTS: OHP ${tested.ohp || "—"} · dip ${tested.dip || "—"} · pull-up ${tested.pullup || "—"}. No broad-jump measurement in this block.`);
     L.push(`AUTO-FLAGS: ${s2} set${s2===1?"":"s"} below the week's reserve floor of ${RIR_FLOOR(w)}${s2>=2 ? " — hold the next scheduled increment" : ""}. Adductor check: ${weekAdductorFlag(w) ? "ABNORMAL — running and high-tier progressions are held" : "normal"}.`);
     L.push("");
     L.push("Coach: review this week against docs/autoregulation-criteria.md. Tell me: (1) the response level (none / 1 / 2 / 3) with the evidence for it; (2) each prescription to change next week, with the reversal condition; (3) anything that must be held rather than advanced. Never advance impact or running to compensate for a missed ride.");
@@ -723,22 +724,21 @@ export default function ConcurrentBlockTracker() {
     const vol = weekVolume(w);
     const wed = impactFor(w, "wed"), fri = impactFor(w, "fri");
     const highTotal = (wed?.high || 0) + (fri?.high || 0);
-    const isMeasureWeek = !!(wed?.test || fri?.test);
     return JSON.stringify({
       app: "concurrent-block", kind: "week-report", version: 16, blockVersion: BLOCK_VERSION,
       programId: PROGRAM_ID, source: SOURCE,
       week: w, phase: PHASE(w), badge: BADGE[w] || null, targetRir: TARGET_RIR(w), rirFloor: RIR_FLOOR(w),
       flags: { deload: REDUCED.has(w), testWeek: w === TEST_WEEK,
                highTierActive: highTotal > 0, runningActive: !!fri?.run,
-               measurementWeek: isMeasureWeek },
+               measurementWeek: false },
       impactLedger: {
         low: (wed?.low || 0) + (fri?.low || 0),
         moderate: (wed?.moderate || 0) + (fri?.moderate || 0),
         high: highTotal,
         highCap: META.highContactCap,
         /* Weeks 1 and 12 carry three MEASUREMENT jumps under the approved C03 exception;
-           the six-contact cap governs training contacts, not the broad-jump protocol. */
-        capOk: highTotal <= META.highContactCap || isMeasureWeek,
+           no measurement weeks remain, so the cap applies everywhere. */
+        capOk: highTotal <= META.highContactCap,
         capMinutes: META.impactCapMinutes,
       },
       volumeAudit: { ...vol, floors: FLOORS, waived: REDUCED.has(w) },
@@ -931,10 +931,9 @@ export default function ConcurrentBlockTracker() {
     const exDone = isDoneEff(ex, { sets:1 });
     const q = elasticQ[sessKey] || "";
     const total = tiers.reduce((a, t) => a + px[t], 0);
-    /* Weeks 1 and 12 carry three MEASUREMENT jumps — the approved C03 exception, not
-       routine high-tier eligibility. The cap applies to training contacts. */
-    const isJumpTest = px.test;
-    const capOk = px.high <= META.highContactCap || isJumpTest;
+    /* The broad-jump measurement was withdrawn after review. No impact session is a
+       test any more, so the six-contact cap applies everywhere without exception. */
+    const capOk = px.high <= META.highContactCap;
     const capMin = px.capMinutes;
     const planned = Math.round((px.baseSeconds / 60) * 10) / 10;
     const travel = Math.round((px.travelSeconds / 60) * 10) / 10;
@@ -949,8 +948,7 @@ export default function ConcurrentBlockTracker() {
         </div></div>
         <div className="sprintmeta">
           <span>high tier <b>{px.high}</b></span>
-          <span className={capOk ? "ok" : "warn-txt"}>
-            {isJumpTest ? "measurement attempts" : `weekly cap ${META.highContactCap}`}</span>
+          <span className={capOk ? "ok" : "warn-txt"}>weekly cap {META.highContactCap}</span>
           <span className={tight ? "warn-txt" : ""}>{travel} min left for travel</span>
         </div>
         {tight && (
@@ -1002,26 +1000,6 @@ export default function ConcurrentBlockTracker() {
             ))}
           </div>
         </div>
-        {week === 1 && day === "fri" && (
-          <div className="tested-row baseline">
-            <label htmlFor="broadbase">Broad-jump BASELINE (in) — best valid of 3</label>
-            <input id="broadbase" inputMode="decimal" value={tested.broadBase || ""} placeholder="—"
-              onChange={e => setTested(p => ({ ...p, broadBase: e.target.value }))} />
-          </div>
-        )}
-        {week === TEST_WEEK && day === "fri" && (
-          <div className="tested-row baseline">
-            <label htmlFor="broadres">Broad-jump RESULT (in) — best valid of 3</label>
-            <input id="broadres" inputMode="decimal" value={tested.broad || ""} placeholder="—"
-              onChange={e => setTested(p => ({ ...p, broad: e.target.value }))} />
-          </div>
-        )}
-        {week === TEST_WEEK && day === "fri" && tested.broadBase && (
-          <div className="systemload">Week-1 baseline <b>{tested.broadBase} in</b> — the +4 in target is {parseFloat(tested.broadBase) + 4} in
-            {tested.broad ? ` · change ${(parseFloat(tested.broad) - parseFloat(tested.broadBase)).toFixed(1)} in` : ""}
-            {". Improvement is desired, not predicted."}</div>
-        )}
-        {isJumpTest && <div className="banner soft">All attempted landings count, valid or not, and there are no replacement attempts. Report the best valid distance only after the complete three-attempt protocol — otherwise the comparison stays unverified. Same shoes, surface, start line and arm-swing convention as the other measurement. Measure to the nearest heel on a stable landing.</div>}
         {/* The day's broad jump is a prescribed row that is PAID FOR out of this clock,
             not the strength clock, so it belongs on this card rather than in the grid. */}
         {impactItemsFor(week, day).map(it => (

@@ -65,6 +65,8 @@ const ID = {
   "Low-bar squat": "squat",
   "Reverse lunge": "lunge",
   "Supported dumbbell single-leg RDL": "slrdl",
+  "Lying leg curl": "legcurl",              // coaching amendment A1
+  "Standing calf raise": "calf",            // coaching amendment A1
   "Knee-supported short-lever Copenhagen": "copen",
   // shoulder health
   "Cable external rotation": "extrot",
@@ -173,6 +175,224 @@ function cutRules() {
   return out;
 }
 
+/* ------------------------------------------------------- COACHING AMENDMENTS
+   Changes made to the source plan AFTER it was reviewed, at Brian's instruction.
+   They live here, in one place, applied to the source structure before anything
+   else runs — so the vendored source stays pristine and read-only, the timing
+   and audit arithmetic downstream recomputes itself, and every amendment is
+   reviewable in a single diff.
+
+   Each one records WHY, because a future session will otherwise assume the
+   source said this.
+
+   A1. Plantarflexor and hamstring work on both lower days.
+       The source prescribes 40–60 pogo contacts a week plus hill and flat
+       accelerations, while giving the calf ZERO direct work and the hamstring
+       twelve reps a week (one set of supported single-leg RDL). The adductor,
+       which has a symptom history, gets thirty-six. The hamstring is the primary
+       sprint-injury site and the plantarflexors take the dominant load in pogos
+       and acceleration; both were being asked to absorb new impact without any
+       preparation. Monday gets knee-flexion work, which is the function its
+       deadlift does not train; Friday's existing hinge is doubled.
+
+   A2. Dip six-rep ladder made an even climb.
+       The source ran 35 → 37.5 → 40 → 42.5 → 45 and then tested at 50, so the
+       final step was +5 where every previous step was +2.5, and the last actual
+       six-rep exposure was two weeks before the test. Week 11 becomes a six at
+       +47.5 so the test is the same size step as all the others.
+
+   A3. Broad-jump measurement removed.
+       The source listed "+4 inches" as one of four success targets while
+       prescribing 18 maximal jump attempts across twelve weeks — six of them the
+       tests themselves — and holding high-tier contacts flat at six a week from
+       week 5 with no progression. That is a maintenance dose against a
+       development target, so the measurement could only ever report
+       familiarisation. Brian elected to drop it. The TRAINING jumps in weeks 5
+       and 7–11 stay: they are the Friday power slot and they are gated normally.
+       Week 1 takes the same double-kettlebell clean the following weeks use.
+       Week 12 Friday now carries no power work at all, which is deliberate —
+       nothing belongs in front of three maximal strength tests.                */
+
+const REDUCED_WEEKS = new Set([6, 12]);
+
+const calfItem = (reduced) => ({
+  exercise: "Standing calf raise",
+  sets: reduced ? 1 : 2,
+  reps: "12", reps_max: 12,
+  load: "Light to moderate, full range, one-second pause at the top and a controlled lower. Record the setting that meets the reserve; add the smallest step only after two comparable clean exposures.",
+  family: "leg_accessory",
+  rir: reduced ? "≥5" : "3",
+  rest_seconds: 60, per_side: false, seconds_per_rep: 2,
+  purpose: "Plantarflexor and Achilles preparation for the pogo, hurdle-hop and acceleration load this block prescribes",
+  cut_priority: "cut_second", clock: "strength",
+  unilateral: false, lower_strength: false, direct_abdominal: false,
+  shoulder_health: false, direct_arm: false, dynamic_rotation: false,
+  power: false, work_set: false, system_load: false,
+  fallback: "Seated calf raise, or single-leg bodyweight raises at 2×12 per side if no machine is free. Either keeps the exposure; neither is a reason to add load quickly.",
+  progression: "This is preparation for impact, not a strength lift. Full range and a controlled lower matter more than the number. Add the smallest available step only after two comparable clean exposures with a normal next morning. Calf or Achilles soreness that changes how you walk or land means hold the dose and review the impact block first — the jumps are the larger stressor, not this.",
+  execution_seconds: reduced ? 24 : 48,
+});
+
+const hamstringItem = (reduced) => ({
+  exercise: "Lying leg curl",
+  sets: reduced ? 1 : 2,
+  reps: "8", reps_max: 8,
+  load: "Light trial to the stated reserve; save the setting. Compare only with the last normal appearance.",
+  family: "leg_accessory",
+  rir: reduced ? "≥5" : "3",
+  rest_seconds: 90, per_side: false, seconds_per_rep: 3,
+  purpose: "Knee-flexion hamstring capacity — the primary sprint-injury site, and the function Monday's deadlift does not train",
+  cut_priority: "cut_second", clock: "strength",
+  unilateral: false, lower_strength: false, direct_abdominal: false,
+  shoulder_health: false, direct_arm: false, dynamic_rotation: false,
+  power: false, work_set: false, system_load: false,
+  fallback: "Seated leg curl, or a band-resisted prone curl at the same sets and reserve. A Nordic or razor curl is NOT a like-for-like swap here — it is far more eccentric, and introducing it mid-block would add soreness that interferes with the Wednesday impact session. If you want one, bring it to a weekly review once running tolerance is established.",
+  progression: "Two sets of eight at three reps in reserve. Add reps within the set before adding load; once both sets are comfortable at eight, take the smallest load step. Stop the set if you feel a sharp or pulling sensation rather than working effort — this exercise exists to protect the hamstring, and training it into soreness before a sprint day defeats the point.",
+  execution_seconds: reduced ? 24 : 48,
+});
+
+function amendmentBlock(name, detail, items, indices, seconds, execution) {
+  return {
+    name, item_indices: indices, ramps: [], drills: [], detail,
+    components_seconds: {
+      execution, between_set_or_ramp_rest: 0, side_changes: 0,
+      setup_and_load_changes: 0, transition: 0, rehearsal: 0,
+      rehearsal_rest: 0, finish_recovery: 0, delay_reserve: 0,
+    },
+    rounding_buffer_seconds: seconds - execution,
+    total_seconds: seconds,
+  };
+}
+
+function applyAmendments(src) {
+  const sessionOf = (w, d) => src.sessions.find((s) => s.week === w && s.day === d);
+  const impactOf = (w, d) => src.impact_sessions.find((s) => s.week === w && s.day === d);
+
+  for (let w = 1; w <= 12; w++) {
+    const reduced = REDUCED_WEEKS.has(w);
+
+    /* ── A1 · Monday: knee-flexion hamstring + calf ─────────────────────────── */
+    {
+      const s = sessionOf(w, "monday");
+      const ham = hamstringItem(reduced), calf = calfItem(reduced);
+      const i0 = s.items.length;
+      s.items.push(ham, calf);
+      // 2×8 curls at 3 s/rep + one 90 s rest + setup; 2×12 raises at 2 s/rep + one
+      // 60 s rest + setup. Reduced weeks run one set of each and no interset rest.
+      const secs = reduced ? 180 : 330;
+      const exec = ham.execution_seconds + calf.execution_seconds;
+      s.timeline.push(amendmentBlock(
+        "Hamstring and calf",
+        "Added after review: the block prescribes pogos, hurdle hops and accelerations while the calf had no direct work and the hamstring twelve reps a week. Knee-flexion work here because Monday's deadlift is hip-extension. Full rest between sets; this is protective preparation, not a set to chase.",
+        s.items, [i0, i0 + 1], secs, exec));
+      s.total_seconds += secs;
+      s.minutes = Math.round((s.total_seconds / 60) * 100) / 100;
+    }
+
+    /* ── A1 · Friday: double the existing hinge, and add calf ───────────────── */
+    friday: {
+      const s = sessionOf(w, "friday");
+      const slrdl = s.items.find((i) => i.exercise === "Supported dumbbell single-leg RDL");
+      let added = 0;
+      if (slrdl && !reduced && slrdl.sets === 1) {
+        slrdl.sets = 2;
+        slrdl.purpose = "Hip-extension hamstring capacity ahead of the accelerations, at a dose that can actually protect the tissue";
+        // one more pair: 6 reps/side at 3 s + a 20 s side change + one 90 s rest
+        const blk = s.timeline.find((b) => b.name === "Additional leg accessory");
+        if (blk) {
+          blk.components_seconds.execution += 36;
+          blk.components_seconds.side_changes += 20;
+          blk.components_seconds.between_set_or_ramp_rest += 90;
+          blk.total_seconds += 150;
+          blk.detail += " Second pair added after review: one set of six per side is not a protective hamstring dose in a block that introduces sprinting.";
+          added += 150;
+        }
+      }
+      // Week-12 Friday is three maximal strength tests. Nothing gets added in
+      // front of them — not even two minutes of calf raises.
+      if (w === 12) break friday;
+      const calf = calfItem(reduced);
+      const i0 = s.items.length;
+      s.items.push(calf);
+      const secs = reduced ? 90 : 150;
+      s.timeline.push(amendmentBlock(
+        "Calf",
+        "Added after review. The plantarflexors and Achilles take the dominant load in pogos and acceleration and had no direct preparation anywhere in the block.",
+        s.items, [i0], secs, calf.execution_seconds));
+      added += secs;
+      s.total_seconds += added;
+      s.minutes = Math.round((s.total_seconds / 60) * 100) / 100;
+    }
+  }
+
+  /* ── A2 · the dip ladder's last step ──────────────────────────────────────── */
+  {
+    const s = sessionOf(11, "sunday");
+    const back = s.items.find((i) => i.exercise === "Weighted dip back-offs");
+    if (!back || back.load !== 47.5) throw new Error("A2: week-11 dip back-off not where expected");
+    back.reps = "6"; back.reps_max = 6;
+    back.purpose = "Rep capacity toward the six-rep target — the last six-rep exposure before the test, so the test is a 2.5 lb step like every other";
+    // three extra reps at 4 s
+    const blk = s.timeline.find((b) => b.name === "Dip work");
+    if (blk) { blk.components_seconds.execution += 12; blk.total_seconds += 12; s.total_seconds += 12; }
+    s.minutes = Math.round((s.total_seconds / 60) * 100) / 100;
+  }
+
+  /* ── A3 · remove the broad-jump measurement ───────────────────────────────── */
+  for (const w of [1, 12]) {
+    const im = impactOf(w, "friday");
+    im.events = im.events.filter((e) =>
+      !/Standing broad jump measurement/i.test(e.name) && !/Broad-jump rehearsals/i.test(e.name));
+    im.high = 0; im.moderate = 0; im.test = false;
+    im.base_seconds = im.events.reduce((a, e) => a + e.seconds, 0);
+    im.available_travel_and_extra_prep_seconds = im.cap_seconds - im.base_seconds;
+    im.selection_rule = "No measurement this week. Preserve full preparation and the low-tier dose; if the clock binds, cut contacts rather than preparation, and log the smaller actual dose. A reduced dose does not qualify a larger one.";
+  }
+  {
+    // Week 1 takes the same power movement weeks 2-4 use, so the Friday power slot
+    // survives the loss of the jump.
+    const s1 = sessionOf(1, "friday");
+    const src2 = sessionOf(2, "friday");
+    const idx = s1.items.findIndex((i) => /broad jump/i.test(i.exercise));
+    const donor = src2.items.find((i) => i.exercise === "Double-kettlebell clean");
+    if (idx < 0 || !donor) throw new Error("A3: week-1 Friday power swap failed");
+    s1.items[idx] = JSON.parse(JSON.stringify(donor));
+    // it moves from the impact clock onto the strength clock, and needs its block
+    const donorBlk = src2.timeline.find((b) => b.name === "Daily power");
+    const blk = JSON.parse(JSON.stringify(donorBlk));
+    blk.item_indices = [idx];
+    s1.timeline.splice(1, 0, blk);
+    s1.total_seconds += blk.total_seconds;
+    s1.minutes = Math.round((s1.total_seconds / 60) * 100) / 100;
+  }
+  {
+    // Week 12 Friday carries no power work. Three maximal strength tests are the
+    // session; nothing belongs in front of them.
+    const s = sessionOf(12, "friday");
+    const idx = s.items.findIndex((i) => /broad jump/i.test(i.exercise));
+    if (idx < 0) throw new Error("A3: week-12 Friday jump not found");
+    s.items.splice(idx, 1);
+    s.timeline.forEach((b) => {
+      b.item_indices = b.item_indices.filter((i) => i !== idx).map((i) => (i > idx ? i - 1 : i));
+    });
+  }
+
+  /* ── the audit is now stale; recompute it from the amended rows ───────────── */
+  for (const a of src.weekly_audit) {
+    const items = src.sessions.filter((s) => s.week === a.week)
+      .flatMap((s) => s.items.map((i) => ({ ...i, day: s.day })));
+    const daysOf = (k) => new Set(items.filter((i) => i[k]).map((i) => i.day)).size;
+    a.lower_days = daysOf("lower_strength");
+    a.shoulder_days = daysOf("shoulder_health");
+    a.abdominal_days = daysOf("direct_abdominal");
+    a.unilateral_days = daysOf("unilateral");
+    a.power_days = daysOf("power");
+    a.carry_days = new Set(items.filter((i) => i.family === "carry").map((i) => i.day)).size;
+  }
+  return src;
+}
+
+applyAmendments(src);
 /* ------------------------------------------------------------------- build */
 const CUTS = cutRules();
 const SESSIONS = {};
@@ -459,15 +679,20 @@ export const META = {
   testDay: "fri",
   /* §1 — the four success targets. The three lifting targets require the prescribed
      reps at >= 2 RIR, aiming for 2 (approved resolution C08). Easier qualifies. */
+  /* The broad-jump target was withdrawn after review (coaching amendment A3): the
+     prescribed dose was 18 maximal attempts across the block with high-tier contacts
+     held flat, which could only have measured familiarisation. Three targets remain. */
   targets: {
     ohp: "125 × 2", dip: "+50 × 6", pullup: "+45 × 5",
-    broad: "week-1 baseline + 4 in (desired, not predicted)",
   },
   /* §19 — work-set floors. Weeks 6 and 12 waive press / vertical / horizontal per
      approved resolution C09; the structural floors still hold in every week. */
   floors: {
     press: 18, vertical: 9, horizontal: 6, ratioMax: 1.3,
-    lower: 2, shoulder: 3, abs: 4, biceps: 4, carry: 2, power: 4, unilateral: 4,
+    lower: 2, shoulder: 3, abs: 4, biceps: 4, carry: 2, unilateral: 4,
+    /* Four power days in weeks 1–11. Week 12 Friday carries none by design — the
+       session is three maximal tests and nothing belongs in front of them. */
+    power: 4,
   },
   /* §13 — per-session running ceilings. */
   runCeiling: { accelM: 60, totalM: 120 },
@@ -477,6 +702,10 @@ export const META = {
      the hard cap it was in v3: week-12 Friday is deliberately 94 minutes of testing.
      The impact clocks are hard caps, and they differ by day. */
   strengthGuidelineMinutes: 75,
+  /* Amendments A1 pushed fourteen ordinary sessions to 78–78.5 min. The plan's §20
+     is explicit that this is "above the suggestion, not automatically a failure" —
+     but it is a real cost, so the app shows it and test.mjs caps it at 80. */
+  strengthCeilingMinutes: 80,
   strengthIsHardCap: false,
   impactCapMinutes: { wed: ${src.authority_updates.wednesday_impact_cap_minutes}, fri: ${src.authority_updates.friday_impact_cap_minutes} },
   authority: ${JSON.stringify(src.authority_updates)},

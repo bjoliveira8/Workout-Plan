@@ -6,8 +6,8 @@ document is what that review is judged against; the block itself is
 [docs/12-week-concurrent-block-v4.md](12-week-concurrent-block-v4.md), and where the two
 ever disagree, **the block wins**.
 
-Everything here is drawn from §14, §17, §18 and §20 of the block. Nothing is invented for
-the app.
+Everything here is drawn from §14, §17, §18 and §20 of the block, plus the three coaching
+amendments in §0.1. Nothing is invented for the app.
 
 ---
 
@@ -127,6 +127,15 @@ These are the rails. A good week alone does not satisfy them.
   successful exposures, improve ROM *or* take the smallest load step — never both, and never
   by adding sets.
 - **Copenhagen.** Short lever throughout. The long lever is not an automatic progression.
+- **Calf and hamstring (amendment A1).** These are *preparation for impact*, not strength
+  lifts. Full range and a controlled lower matter more than the number. Add the smallest step
+  only after two comparable clean exposures with a normal next morning. Calf or Achilles
+  soreness that changes how you walk or land means **hold the dose and look at the impact
+  block first** — the jumps are the larger stressor, not the raises. A sharp or pulling
+  sensation in the hamstring curl ends the set: the exercise exists to protect that tissue,
+  and training it into soreness before a running day defeats the point. A Nordic or razor
+  curl is **not** a like-for-like swap; it is far more eccentric and belongs in a review
+  decision once running tolerance is established, not a mid-block substitution.
 - **Pull-ups (weeks 7–11).** The longer first Monday set practises five-rep readiness.
   Nominal loads yield to actual prior success; week 11 may run 4–5 reps.
 
@@ -135,7 +144,12 @@ These are the rails. A good week alone does not satisfy them.
 ## 6. Time
 
 **Strength time is a guideline in this block, not a hard cap** — that was an explicit
-instruction. An **82-minute session is above the suggestion, not automatically a failure**:
+instruction. Amendment A1 moved fourteen ordinary sessions to **78–78.5 minutes**; Monday and
+Friday are the two that carry it. If that does not fit the real window, the trade is already
+written into §20: Monday sheds the **reverse lunge** first, Friday the **single-leg hinge**.
+Taking the lunge out returns Monday to about 75 minutes and costs a knee-dominant accessory
+you now have a better substitute for. An **82-minute session is above the suggestion, not
+automatically a failure**:
 log why, retain full rests, and decide whether the extra time is sustainable. Trim optional
 work if workday practicality suffers. Week-12 Friday is **94 minutes by design**.
 
@@ -183,8 +197,9 @@ reason. A fallback is not evidence of ballistic adaptation.
 ## 8. Week-12 and the week-13 contingency
 
 Testing requires the preceding Wednesday and Thursday to be genuinely easy, no red readiness
-domain, and normal adductor and gait status. Broad jump first, then OHP → dip → pull-up with
-**ten minutes** between each.
+domain, and normal adductor and gait status. **There is no broad jump** — that measurement was
+withdrawn (amendment A3), and week-12 Friday carries no power work at all. The session is
+OHP → dip → pull-up with **ten minutes** between each, and nothing in front of them.
 
 Readiness singles must be strict and crisp at roughly RPE ≤7 — they permit *consideration*
 of a target, not a claim of success. One target set per lift. Stop before a grinder or an

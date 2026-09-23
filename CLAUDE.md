@@ -75,9 +75,27 @@ home-screen app. **Use the full absolute project path in every command you give 
 
 ## Architecture — the parts that will bite you if you don't know them
 
+**COACHING AMENDMENTS (`tools/gen-program.mjs`, `applyAmendments`).** The app does NOT run the
+source plan unmodified. Three changes were made after an adversarial review, at Brian's
+instruction, and they are applied to the source structure *before* the build so the timing and
+audit arithmetic recomputes itself:
+- **A1** — calf raises on both lower days and a Monday lying leg curl; Friday's single-leg RDL
+  doubled. The source gave the calf zero direct work and the hamstring twelve reps a week while
+  prescribing 40–60 pogo contacts plus accelerations. Cost: fourteen ordinary sessions at
+  78–78.5 min, capped at `META.strengthCeilingMinutes` (80).
+- **A2** — week-11 dip back-offs 3×5 → 3×6 @ +47.5, so the six-rep ladder climbs in even
+  2.5 lb steps into the test instead of ending on a +5.
+- **A3** — the broad-jump measurement withdrawn; `META.targets.broad` is gone, weeks 1 and 12
+  carry no high-tier contacts, and week-12 Friday carries **no power work at all**. The
+  training jumps in weeks 5 and 7–11 stay.
+
+`tools/gen-block-doc.mjs` asserts all three are present in the generated program before it will
+publish the block document, and `test.mjs` mutation-guards each one. If you regenerate, the
+amendments come along; if you delete them from the generator, the doc build fails loudly.
+
 **The program is generated, the app is hand-written.** `src/program.js` is emitted once by
-`tools/gen-program.mjs` from `docs/source/SYNTHESIZED_PRESCRIPTIONS_V2.json` (48 sessions, 397
-prescribed rows, 24 impact sessions). After that it is committed and **hand-edited by the
+`tools/gen-program.mjs` from `docs/source/SYNTHESIZED_PRESCRIPTIONS_V2.json` (48 sessions, 397 source rows
+→ 431 after the amendments above, 24 impact sessions). After that it is committed and **hand-edited by the
 weekly review** — it is
 this block's `WAVE`. **Never re-run the generator to apply a weekly change**; it would discard
 every accepted edit. Run it only to load a genuinely new block.
@@ -194,7 +212,8 @@ first user gesture (`ensureAudio`) because browsers block autoplay.
 
 - **Sessions are Sunday / Monday / Wednesday / Friday.** Fresh slots: Sun = heavy dip double,
   Mon = pull-up first then deadlift, Wed = strict OHP, Fri = jumps then squat.
-- **Week-12 targets are caps at equal-or-higher reps**: OHP 125×2 · dip +50×6 · pull-up +45×5.
+- **Three targets, not four**: OHP 125×2 · dip +50×6 · pull-up +45×5. The broad jump was
+  withdrawn (A3). They are caps at equal-or-higher reps.
   A heavy *double* legitimately sits above the six-rep dip load — lowering reps while raising
   load is one progression, not two. The cap compares like reps.
 - **The test session is week 12 FRIDAY** (`TEST_WEEK`/`TEST_DAY`), 94 minutes by design, with
@@ -218,9 +237,10 @@ first user gesture (`ensureAudio`) because browsers block autoplay.
 - **Reserve floor**: 2 in a normal week (C08: ≥2 RIR, aiming for 2 — easier qualifies), 4 in
   weeks 6 and 12. An RPE instruction ("RPE ≤4; fast intent") is an effort target, not a
   reserve, so `rirTarget()` gives it no numeric floor and it never warns.
-- **Impact** (§12): **six high-tier contacts a week**, absent before week 5. Weeks 1 and 12
-  carry three maximal broad jumps as the C03 measurement exception and are flagged `test`.
-  Impact never lands on Sunday or Monday.
+- **Impact** (§12): **six high-tier contacts a week**, absent before week 5 — and now before
+  week 5 includes week 1, because the measurement that used to justify three maximal jumps
+  there is gone. **No impact session is flagged `test` any more.** Impact never lands on
+  Sunday or Monday.
 - **The impact clocks are HARD caps and differ by day**: Wednesday 15 min, Friday 30, both
   starting before travel. `base + travel === cap` for all 24 impact sessions, and the event
   seconds must sum to `base`. The fullest Wednesday leaves 65 seconds — the app shows a
@@ -228,7 +248,8 @@ first user gesture (`ensureAudio`) because browsers block autoplay.
 - **Running** (§13): Friday only, after the jumps and before lifting. **None in weeks 1 or
   12.** Hill through week 8; flat only from week 9, and terrain is the *only* change at flat
   entry. Ceiling **60 acceleration metres and 120 total metres**. Equal runout every rep.
-- **Power** (§ daily power): four days a week with its own dose, rehearsal and stop rules.
+- **Power** (§ daily power): four days a week in weeks 1–11, **three in week 12** (the test
+  session carries none by design), with its own dose, rehearsal and stop rules.
   Quality is the stop rule — a "stopped" movement is logged as **omitted**, not completed,
   and cannot qualify a load increase. Most power items carry a text load, so they use the
   power-quality control rather than bar speed.
@@ -237,7 +258,8 @@ first user gesture (`ensureAudio`) because browsers block autoplay.
 - **Biceps**: Sunday and Wednesday only, three recurring variation pairs at 2×8–12.
   **No direct triceps anywhere** — `test.mjs` greps the rendered names for it.
 - **Time**: strength is a GUIDELINE (`META.strengthIsHardCap === false`). Block seconds must
-  sum to the session total, and week-12 Friday is the only session over the guideline.
+  sum to the session total. Fourteen ordinary sessions sit at 78–78.5 min after A1; the guard
+  is `META.strengthCeilingMinutes` (80) for ordinary sessions and exactly 94 for the test.
 - **Absolute exercise exclusions:** Turkish get-up · Bulgarian split squat · barbell RDL ·
   dumbbell row · cable row · cable flye.
 - **Conflict hierarchy** (§5): tissue tolerance → OHP/dip/pull-up → prescribed TrainerRoad →

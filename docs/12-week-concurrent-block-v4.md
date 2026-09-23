@@ -40,10 +40,45 @@ printed in full. Several pass with an explicitly approved exception. Actual meas
 ride intensity, recovery and every target outcome remain **unverified** — the document says
 so plainly and so does this one.
 
+## 0.1 Coaching amendments applied on top of this document
+
+Everything below section 0 is the source plan **as written**. The tracker runs it with three
+documented changes, made after an adversarial review and at Brian's instruction. They live in
+one place, `tools/gen-program.mjs`, and `test.mjs` guards each of them.
+
+**A1 · Plantarflexor and hamstring work on both lower days.** The source prescribes 40–60 pogo
+contacts a week plus hill and flat accelerations while giving the calf **no direct work at all**
+and the hamstring **twelve reps a week** — against thirty-six for the adductor, which is the
+tissue that already has a symptom history. The hamstring is the primary sprint-injury site and
+the plantarflexors take the dominant load in pogos and acceleration. Added: a standing calf
+raise (2×12, 1×12 in reduced weeks) on Monday and Friday, and a lying leg curl (2×8) on Monday,
+which trains the knee flexion the Monday deadlift does not. Friday's existing single-leg RDL
+goes from one set to two. **Cost: fourteen ordinary sessions move to 78–78.5 minutes**, which
+§20 of this document explicitly treats as above the suggestion rather than a failure. Nothing
+was added to week-12 Friday — that session is three maximal tests.
+
+**A2 · The dip six-rep ladder climbs evenly into the test.** The source ran 35 → 37.5 → 40 →
+42.5 → 45 and then tested at +50, so the final step was +5 where every previous step was +2.5,
+and the last actual six-rep exposure sat two weeks before the test. Week 11 becomes 3×6 @ +47.5
+instead of 3×5, making the test the same size step as all the others.
+
+**A3 · The broad-jump measurement is withdrawn.** The source listed "+4 inches" as one of four
+success targets while prescribing eighteen maximal jump attempts across the block — six of them
+the tests themselves — and holding high-tier contacts flat at six a week from week 5 with no
+progression. That is a maintenance dose against a development target, so the measurement could
+only ever have reported familiarisation. The **training** jumps in weeks 5 and 7–11 remain; they
+are the Friday power slot and are gated normally. Week 1 takes the double-kettlebell clean that
+weeks 2–4 already use. Week-12 Friday now carries no power work at all, which is deliberate.
+
+Three success targets remain: OHP 125 × 2, dip +50 × 6,
+pull-up +45 × 5.
+
 **What this repo verified independently**, so the document and the app cannot drift apart:
 
 - All 397 prescribed rows across 48 sessions and 24 impact sessions parse into
-  `src/program.js`, and every field round-trips against the source JSON exactly.
+  `src/program.js`, and every field round-trips against the source JSON exactly. After the
+  amendments above the app runs **431 rows**; the difference is the added calf and
+  hamstring work, and it is asserted row by row.
 - The weekly audit re-derives from those rows — press, vertical, horizontal, ratio, biceps
   sets and every exposure-day count — and matches the source's audit for all twelve weeks.
   The tracker recomputes the same audit at runtime and `test.mjs` asserts they agree.
