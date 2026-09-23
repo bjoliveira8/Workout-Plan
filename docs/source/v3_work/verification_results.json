@@ -1,0 +1,654 @@
+{
+  "summary": {
+    "pass": 78,
+    "approved_exception": 9,
+    "fail": 0,
+    "unknown": 5,
+    "total": 92,
+    "all_checks_passed": false
+  },
+  "checks": [
+    {
+      "group": 1,
+      "check": "Exactly 48 distinct sessions",
+      "status": "pass",
+      "detail": "48 sessions"
+    },
+    {
+      "group": 1,
+      "check": "Every session dated from Sun Sep 27, 2026 with the correct weekday",
+      "status": "pass",
+      "detail": "mismatches: none"
+    },
+    {
+      "group": 1,
+      "check": "Week-13 makeup is Saturday Dec 26, 2026",
+      "status": "pass",
+      "detail": "Saturday, not Christmas Day"
+    },
+    {
+      "group": 1,
+      "check": "Every exercise row has dose, load or selection rule, reserve, rest, purpose, unit, side convention and cut label",
+      "status": "pass",
+      "detail": "464 rows; missing: none"
+    },
+    {
+      "group": 1,
+      "check": "Every non-main exercise has a fallback",
+      "status": "pass",
+      "detail": "missing: none"
+    },
+    {
+      "group": 1,
+      "check": "Power, arm, calf, leg, adductor, core and carry rows state a progression rule",
+      "status": "pass",
+      "detail": "missing: none"
+    },
+    {
+      "group": 2,
+      "check": "Every strength session ≤75:00 including a 5:00 delay reserve",
+      "status": "pass",
+      "detail": "longest 73 min; over: none; missing reserve: none"
+    },
+    {
+      "group": 2,
+      "check": "Block arithmetic: components sum, 30-s round-up and session totals all reconcile",
+      "status": "pass",
+      "detail": "errors: none"
+    },
+    {
+      "group": 2,
+      "check": "Execution time independently recomputed from sets × top of rep range × tempo × sides",
+      "status": "pass",
+      "detail": "mismatches: none"
+    },
+    {
+      "group": 2,
+      "check": "Even if every priority rest runs to 3:00, no session exceeds 75:00",
+      "status": "pass",
+      "detail": "worst case 75 min"
+    },
+    {
+      "group": 2,
+      "check": "Wednesday impact ≤15:00 (hard)",
+      "status": "pass",
+      "detail": "longest 14.58 min; over: none"
+    },
+    {
+      "group": 2,
+      "check": "Friday impact within ~30:00 target (soft limit; travel not budgeted)",
+      "status": "approved_exception",
+      "detail": "longest 29.82 min [E8]"
+    },
+    {
+      "group": 2,
+      "check": "Impact clocks sum from their events",
+      "status": "pass",
+      "detail": "errors: none"
+    },
+    {
+      "group": 3,
+      "check": "Week 1 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 1 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 2 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 2 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 3 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 3 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 4 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 4 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 5 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 5 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 6 reduced-volume floors",
+      "status": "approved_exception",
+      "detail": "12/6/5, ratio 1.09 [E1]"
+    },
+    {
+      "group": 3,
+      "check": "Week 6 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 7 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 7 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 8 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 8 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 9 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 9 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 10 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 10 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 11 floors (press 16–20, vertical 8–12, horizontal ≥6, ratio ≤1.3)",
+      "status": "pass",
+      "detail": "20/9/7, ratio 1.25"
+    },
+    {
+      "group": 3,
+      "check": "Week 11 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Week 12 reduced-volume floors",
+      "status": "approved_exception",
+      "detail": "8/3/4, ratio 1.14 [E1]"
+    },
+    {
+      "group": 3,
+      "check": "Week 12 stored audit matches recount",
+      "status": "pass",
+      "detail": "recounted from rows"
+    },
+    {
+      "group": 3,
+      "check": "Work-set definition: every counted set ≥80% of that exercise's top load that day",
+      "status": "pass",
+      "detail": "violations: none"
+    },
+    {
+      "group": 4,
+      "check": "A major (priority) lift every lifting day",
+      "status": "pass",
+      "detail": "missing: none"
+    },
+    {
+      "group": 4,
+      "check": "Exactly one explicit power exercise every day (purpose, standard, progression, fallback), except none on week-12 Friday",
+      "status": "approved_exception",
+      "detail": "problems: none [E11]"
+    },
+    {
+      "group": 4,
+      "check": "A qualifying unilateral strength exercise (≥2 sets) every day",
+      "status": "pass",
+      "detail": "missing: none"
+    },
+    {
+      "group": 4,
+      "check": "Exactly one arm exercise: biceps Sun/Wed, triceps Mon/Fri",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 4,
+      "check": "Direct core every day (carries not counted)",
+      "status": "pass",
+      "detail": "missing: none"
+    },
+    {
+      "group": 4,
+      "check": "At least 2 distinct qualifying accessories every day",
+      "status": "pass",
+      "detail": "short: none"
+    },
+    {
+      "group": 4,
+      "check": "Power picks match the approved choices",
+      "status": "pass",
+      "detail": "sunday: ['Medicine-ball chest pass to a wall', 'Plyometric push-up (hands leave the floor)']; monday: ['One-arm kettlebell snatch (if gate met)', 'Two-hand kettlebell swing']; wednesday: ['Rotational medicine-ball scoop throw (to a wall)']; friday: ['Double-kettlebell clean (from the hang)']"
+    },
+    {
+      "group": 5,
+      "check": "Calves Monday and Friday: ≥3 sets normal weeks, 2 sets in W6/W12",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 5,
+      "check": "Calf exercises vary (two variations per day, straight-knee Monday, bent-knee Friday)",
+      "status": "pass",
+      "detail": "Monday ['One-leg dumbbell calf raise on a step', 'Standing barbell or Smith calf raise on a plate']; Friday ['Bent-knee calf raise with 3-s stretch pause', 'Seated calf raise']"
+    },
+    {
+      "group": 6,
+      "check": "Extra leg exercise Monday (lunge) and Friday (single-leg RDL): ≥2 sets, never cut, free weights",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 7,
+      "check": "Every week: ≥2 carry days, ≥3 shoulder-health days, 2 distinct dynamic rotations on ≥2 days, Pallof not counted as rotation",
+      "status": "pass",
+      "detail": "failing weeks: none"
+    },
+    {
+      "group": 7,
+      "check": "Wall slides only in warm-ups",
+      "status": "pass",
+      "detail": "no wall-slide exercise rows or non-warm-up blocks"
+    },
+    {
+      "group": 8,
+      "check": "Rests within the approved ranges (priority 2:00–3:00, squat/DL 2:30–3:00, power 60–90 s, accessories/superset ≥60 s; Pallof 45 s)",
+      "status": "approved_exception",
+      "detail": "out of range: none [E7]"
+    },
+    {
+      "group": 8,
+      "check": "No superset contains priority/main-lift work",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 9,
+      "check": "No excluded exercise in any prescription, fallback or card (Turkish get-up, Bulgarian split squat, bilateral barbell RDL, cable flye)",
+      "status": "pass",
+      "detail": "hits: none"
+    },
+    {
+      "group": 9,
+      "check": "Dumbbell and cable rows used only as permitted after the exclusion was lifted",
+      "status": "approved_exception",
+      "detail": "one-arm DB rows Sunday/Wednesday; cable row as fallback [E9]"
+    },
+    {
+      "group": 10,
+      "check": "Contacts match the approved tier table; ≤15% weekly growth per tier except named entry/restoration",
+      "status": "approved_exception",
+      "detail": "problems: none [E3]"
+    },
+    {
+      "group": 10,
+      "check": "Sprints: Friday only, ≤250 m, ≤20 m reps with 2:00–3:00 rest, outdoors (hill then flat)",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 10,
+      "check": "Sprint stages change one variable at a time (reductions allowed)",
+      "status": "pass",
+      "detail": "multi-variable steps: none"
+    },
+    {
+      "group": 10,
+      "check": "Each sprint stage has two exposures before advancing (C05; week 6 deload excluded)",
+      "status": "pass",
+      "detail": "early advances: none"
+    },
+    {
+      "group": 11,
+      "check": "Wednesday OHP path matches the approved table (W1 117.5 → W11 127.5; no calibration single)",
+      "status": "pass",
+      "detail": "mismatches: none"
+    },
+    {
+      "group": 11,
+      "check": "Week-12 tests: OHP 130×2 Wednesday; dip +50×6 then pull-up +45×5 Friday; nothing else tested",
+      "status": "pass",
+      "detail": "[(12, 'friday', 'Neutral-grip pull-up target test', 45, '5'), (12, 'friday', 'Weighted dip target test', 50, '6'), (12, 'wednesday', 'Strict OHP target test', 130, '2')]"
+    },
+    {
+      "group": 11,
+      "check": "No dip or pull-up work on week-12 Wednesday (easy day for Friday tests)",
+      "status": "approved_exception",
+      "detail": "Wednesday holds only the OHP test and easy accessories [E5]"
+    },
+    {
+      "group": 11,
+      "check": "Friday tests: dip before pull-up with 10:00 passive rest between",
+      "status": "pass",
+      "detail": "Warm-up → Dip test ramps → Dip test → Passive recovery between tests → Pull-up test ramps → Pull-up test → Squat ramps (after tests) → Squat work → Extra leg exercise → Copenhagen + calves (superset) → Triceps + prone Y (superset) → Core: landmine rotation → Delay reserve"
+    },
+    {
+      "group": 11,
+      "check": "Week-12 Monday is an easy day (all rows ≥4 RIR or easy power)",
+      "status": "pass",
+      "detail": "Two-hand kettlebell swing: RPE about 3"
+    },
+    {
+      "group": 12,
+      "check": "Deadlift every Monday (12 exposures, 7-day spacing): 10 heavy (450 + 405 back-off), 2 light (390) in W6/W12",
+      "status": "approved_exception",
+      "detail": "heavy weeks [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]; light [6, 12] [E2]"
+    },
+    {
+      "group": 13,
+      "check": "Every V3 evidence row is linked or marked UNVERIFIED (preference-only rows labelled as such)",
+      "status": "pass",
+      "detail": "12 rows; problems: none"
+    },
+    {
+      "group": 14,
+      "check": "Every JSON row appears on its card in order with identical sets × reps; every card total matches",
+      "status": "pass",
+      "detail": "mismatches: none"
+    },
+    {
+      "group": 14,
+      "check": "Each standalone week file body is identical to its section in the combined cards",
+      "status": "pass",
+      "detail": "differences: none"
+    },
+    {
+      "group": 14,
+      "check": "All deliverable files exist (verification file written by this script)",
+      "status": "pass",
+      "detail": "17 files checked"
+    },
+    {
+      "group": 14,
+      "check": "Training block has all 21 numbered sections",
+      "status": "pass",
+      "detail": "sections 1–21"
+    },
+    {
+      "group": 14,
+      "check": "JSON parses",
+      "status": "pass",
+      "detail": "valid JSON"
+    },
+    {
+      "group": 14,
+      "check": "Nothing labelled approved",
+      "status": "pass",
+      "detail": "ready_for_review"
+    },
+    {
+      "group": 14,
+      "check": "Source folder still present and read-only in this build (no writes outside 9.22.26)",
+      "status": "pass",
+      "detail": "builders write only to Desktop/Workout Plan 9.22.26"
+    },
+    {
+      "group": 16,
+      "check": "The fresh first main-lift slot holds the day's priority lift; warm-up then power precede it (week-12 Friday: warm-up only, E11)",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 16,
+      "check": "Impact only on Wednesday and Friday, always before that day's lifting",
+      "status": "pass",
+      "detail": "impact precedes lifting on every Wed/Fri card"
+    },
+    {
+      "group": 17,
+      "check": "Meaningful lower-body strength on exactly Monday and Friday",
+      "status": "pass",
+      "detail": "upper-day lower work: none; missing: none"
+    },
+    {
+      "group": 18,
+      "check": "Dips and pull-ups carry added load with system-load flag",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 18,
+      "check": "Every one-side exercise has ≥2 sets in every week, and cutting never takes it below 2",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 19,
+      "check": "Scope: no ride content, nutrition, wearable rules, app work or tennis in the cards",
+      "status": "pass",
+      "detail": "hits: none"
+    },
+    {
+      "group": 20,
+      "check": "Every card prints its sequencing checks, cut order and fatigue/change rules",
+      "status": "pass",
+      "detail": "missing: none"
+    },
+    {
+      "group": 18,
+      "check": "No exercise is done for fewer than 2 total sets (one-set target tests excepted)",
+      "status": "pass",
+      "detail": "violations: none"
+    },
+    {
+      "group": 18,
+      "check": "Cut rules never leave an exercise at 1 set (keep ≥2, or skip the whole optional exercise)",
+      "status": "pass",
+      "detail": "violations: none"
+    },
+    {
+      "group": 21,
+      "check": "DB incline bench: Friday only, 2 sets in weeks 1–11, supersetted with the single-leg RDL, absent in week 12",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 21,
+      "check": "Sunday row carries the ratio offset: 4 sets normal weeks, 3 in week 6, 2 in week 12",
+      "status": "pass",
+      "detail": "problems: none"
+    },
+    {
+      "group": 21,
+      "check": "Week-12 test-day cards mention no incline press and use test-day cut/sequencing text",
+      "status": "pass",
+      "detail": "test-day variants in use"
+    },
+    {
+      "group": 21,
+      "check": "Training block headline numbers match the data (no stale 18/9/6 or 1.20)",
+      "status": "pass",
+      "detail": "Normal weeks are now 20 press / 9 vertical / 7 horizontal work sets (ratio 1.25)"
+    },
+    {
+      "group": 21,
+      "check": "Amendment A2: week-11 Sunday dip back-offs are 3×6 @ +47.5 (even 2.5 lb steps into the test)",
+      "status": "pass",
+      "detail": "3×6 @ +47.5"
+    },
+    {
+      "group": 21,
+      "check": "Evidence ledger has a row for the DB incline decision",
+      "status": "pass",
+      "detail": "row present in section 4"
+    },
+    {
+      "group": 0,
+      "check": "Actual session and impact durations",
+      "status": "unknown",
+      "detail": "Projected from arithmetic; real times need logging"
+    },
+    {
+      "group": 0,
+      "check": "Equipment and space availability",
+      "status": "unknown",
+      "detail": "Medicine balls/wall, landmine, trap bar, 30 cm box, calf stations, sprint strip unverified"
+    },
+    {
+      "group": 0,
+      "check": "Recovery and tissue tolerance at near-full starting dose",
+      "status": "unknown",
+      "detail": "Needs weeks 1–2 logs"
+    },
+    {
+      "group": 0,
+      "check": "Goal outcomes (OHP 130×2, dip +50×6, pull-up +45×5, maintenance, plyo capacity)",
+      "status": "unknown",
+      "detail": "Planned, not achieved"
+    },
+    {
+      "group": 0,
+      "check": "Kettlebell snatch proficiency by week 7",
+      "status": "unknown",
+      "detail": "Gate decides at the time"
+    }
+  ],
+  "scenarios": [
+    [
+      "Sunday ride ends 30 minutes late",
+      "Start lifting 30 minutes later to keep 6 hours. If the evening is short, cut power sets 3–4 and the 3rd biceps set first; dip work and rows are protected."
+    ],
+    [
+      "Familiar mild adductor soreness, normal gait",
+      "Hold the current plyo and sprint stage and repeat it; progress only after it clears within 24–48 h and two normal mornings."
+    ],
+    [
+      "Symptoms worsen or alter stride",
+      "Stop the affected impact work and get a clinical evaluation. No second warning sign is needed."
+    ],
+    [
+      "Only the last pull-up set fades for two weeks",
+      "Rest up to 3:00 first, then trim the last set's reps or load; keep three weekly exposures; do not call it a tendon problem without symptoms."
+    ],
+    [
+      "Bodyweight +4 lb with a small added-load gain",
+      "Compare system load at matched reps, range and RIR; flag the bodyweight drift; do not call it a strength gain from scale weight alone."
+    ],
+    [
+      "Bodyweight −4 lb",
+      "Recalculate system load; do not automatically add 4 lb of external load; review recovery if the drift persists."
+    ],
+    [
+      "Both lower days decline while upper work is normal",
+      "Hold plyo/sprint and power progression; lighten (not cut) the lunge and single-leg RDL; if it continues, level-2 cut of lower-body sets by 25–35%; review cycling load."
+    ],
+    [
+      "A much higher OHP single is reported (e.g., 140)",
+      "Check strict technique and load; do not chase it; any change to the 130×2 target or the load path needs Brian's approval."
+    ],
+    [
+      "A prescribed ride is missed",
+      "Log it. No bonus lifting, plyo or sprints."
+    ],
+    [
+      "TrainerRoad block is harder than usual",
+      "Hold plyo stage and power loads, drop cut-first sets, and recommend an easier ride if needed — without prescribing ride content."
+    ],
+    [
+      "The optional Friday ride is used every week",
+      "Count it as real stress; keep it after lifting; it is the first thing removed if recovery declines."
+    ],
+    [
+      "Movement-altering pain on its own",
+      "Suspend the affected work and seek evaluation."
+    ],
+    [
+      "A strength session actually takes 82 minutes",
+      "That breaks the 75-minute hard limit. Log where time went; next time apply the cut order (power sets 3–4, 3rd arm set, 3rd calf set…) and use the delay reserve; never shorten priority rests below 2:00. Repeated overruns need a structural change approved by Brian."
+    ],
+    [
+      "Power repeatedly slows the next ramp",
+      "Stop power at 2 sets or switch to the printed fallback; log the change; no forced replacement."
+    ],
+    [
+      "Week 5 arrives without high-tier readiness",
+      "High contacts stay at zero; repeat the current low/moderate stage; week 7 cannot restore work that was never tolerated."
+    ],
+    [
+      "Wednesday-morning calf soreness is more than mild",
+      "Hold calf load and start Wednesday at the lower pogo dose; progress calves only after normal mornings."
+    ],
+    [
+      "Snatch gate not met in week 7",
+      "Keep progressing two-hand swings at 4×5; try the gate again after two crisp swing exposures."
+    ],
+    [
+      "Elbows sore after Friday triceps before Sunday dips",
+      "Hold triceps load and drop the 3rd triceps set first; dips are protected."
+    ],
+    [
+      "Week-12 dip test leaves real fatigue",
+      "Defer the pull-up test to Saturday, Dec 26 (after an easy Thursday and a rest day); it gets a fresh first slot and is labelled week 13."
+    ],
+    [
+      "OHP test on Dec 16 grinds",
+      "Recorded as not achieved; no retry on Dec 26."
+    ],
+    [
+      "Makeup date falls on a holiday",
+      "Resolved: Saturday, Dec 26 (Friday Dec 25 is Christmas)."
+    ],
+    [
+      "Friday runs short on time in a normal week",
+      "Cut power sets 3–4, the 3rd triceps and calf sets, then skip DB incline bench entirely (never one set); the single-leg RDL runs alone. Press drops to 18 and the ratio stays legal."
+    ]
+  ]
+}

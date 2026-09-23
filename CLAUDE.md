@@ -4,8 +4,8 @@
 
 Two coupled artifacts:
 
-1. **The program** (`docs/12-week-concurrent-block-v4.md`) — the Astra Synthesized
-   Concurrent Block, **v4.0-syn2**. It is the **source of truth for all training logic**.
+1. **The program** (`docs/12-week-concurrent-block-v5.md`) — the Astra Synthesized
+   Concurrent Block, **v5.0-syn3**. It is the **source of truth for all training logic**.
    The tracker implements it. Its §-numbers are cited throughout this file and in code comments.
 2. **The tracker** (`src/App.jsx` + `src/program.js` → `dist/index.html`) — a single-file
    mobile web app used in the gym on iPhone (GitHub Pages, Add to Home Screen).
@@ -15,28 +15,27 @@ cyclist (3–4 h/week, FTP 229 W), aerobically fit but sprint-tissue decondition
 next-day running-associated adductor tightness without altered gait; no current injury.
 Long femurs, shorter torso. 2.5 lb total microloading available; roughly 5% outdoor hill.
 
-**Time is the binding constraint, and V2 changed how it binds.** Strength time is now a
-**guideline, not a hard cap** — an explicit instruction. Normal sessions project to
-66.5–73.5 minutes and **week-12 Friday is deliberately 94 minutes** of testing. What remains
-a HARD cap is the impact clock, and it now differs by day: **Wednesday 15 minutes, Friday
-30**, both starting before travel. The fullest Wednesday leaves only **65 seconds** for
-transit, which is the constraint most likely to bind in practice.
+**Time is the binding constraint, and V3 made it hard again.** Strength sessions have a
+**hard 75-minute limit**, 5-minute delay reserve included; every session plans at 73.5 minutes
+or less, and at 75.0 or less even if every OHP/dip/pull-up/bench rest runs the full 3:00.
+Wednesday impact is a **hard 15 minutes**; Friday impact a **~30-minute target**. Travel is not
+budgeted (Brian, 23 Sep).
 
 ### Status — the plan is loaded, not approved
 
-The author's own grade is **"A, provisionally"** and the copy is explicitly **not labeled
-approved**. Twenty revision checks plus the original thirteen are documented in
-`docs/source/SYNTHESIS_VERIFICATION_V2.md`; several pass with an explicitly approved
-exception. Measured time, ride intensity, recovery and every target outcome remain
-**unverified** — the source says so and so should you. Do not describe this block as
+Brian approved the V3 **design decisions** (23–24 Sep 2026); the finished plan is **ready for
+review, not approved**. `docs/source/SYNTHESIS_VERIFICATION_V3.md` records 92 written-program
+checks — 0 failures, 9 passes under named approved exceptions, 5 real-world unknowns (actual
+time, equipment, recovery, outcomes, snatch proficiency). Do not describe this block as
 verified training advice. It is arithmetic that checks out.
 
-### History — this repo has carried four programs
+### History — this repo has carried five programs
 
 Press-Priority Hybrid v1.3 (through July 2026) → Astra Concurrent Block v2.0-w1 (September
-2026, one day) → Synthesized v3.0-syn1 (21 September 2026, one day) → this block. All are
-preserved in `docs/archive/`, none are interchangeable, and old training data is preserved
-in the app too (see the migration below).
+2026, one day) → Synthesized v3.0-syn1 (21 September) → v4.0-syn2 (22 September, plus coaching
+amendments A1–A3) → this block, v5.0-syn3 (loaded 24 September, starts 27 September). All
+earlier ones are preserved in `docs/archive/`, none are interchangeable, and old training data
+is preserved in the app too (see the migration below).
 
 ## Repo layout
 
@@ -49,12 +48,13 @@ test.mjs                             ← jsdom smoke tests + PROGRAM INVARIANT g
 src/App.jsx                          ← the app: logic, UI, CSS (one file, by design)
 src/program.js                       ← GENERATED prescriptions — the single edit point for loads
 src/entry.jsx                        ← mount + localStorage shim for window.storage
-tools/gen-program.mjs                ← one-shot: source JSON → src/program.js
+tools/gen-program.mjs                ← one-shot: V3 source JSON → src/program.js
 tools/gen-block-doc.mjs              ← one-shot: source narrative → the program doc, with a cross-check
-docs/12-week-concurrent-block-v4.md  ← THE PROGRAM (source of truth)
+docs/12-week-concurrent-block-v5.md  ← THE PROGRAM (source of truth)
 docs/autoregulation-criteria.md      ← the weekly-review decision lens ("the brain")
-docs/source/                         ← the planning session's own artifacts, vendored read-only
-docs/archive/                        ← the three superseded programs, their brains and v3's sources
+docs/source/                         ← the V3 planning artifacts (JSON, block, cards, verification,
+                                        change log, proposal, build scripts), vendored read-only
+docs/archive/                        ← the four superseded programs, their brains, v3's and v4's sources
 dist/index.html                      ← built artifact; THE deliverable (self-contained, ~484 KB)
 index.html                           ← root copy that GitHub Pages actually serves
 ```
@@ -75,34 +75,29 @@ home-screen app. **Use the full absolute project path in every command you give 
 
 ## Architecture — the parts that will bite you if you don't know them
 
-**COACHING AMENDMENTS (`tools/gen-program.mjs`, `applyAmendments`).** The app does NOT run the
-source plan unmodified. Three changes were made after an adversarial review, at Brian's
-instruction, and they are applied to the source structure *before* the build so the timing and
-audit arithmetic recomputes itself:
-- **A1** — calf raises on both lower days and a Monday lying leg curl; Friday's single-leg RDL
-  doubled. The source gave the calf zero direct work and the hamstring twelve reps a week while
-  prescribing 40–60 pogo contacts plus accelerations. Cost: fourteen ordinary sessions at
-  78–78.5 min, capped at `META.strengthCeilingMinutes` (80).
-- **A2** — week-11 dip back-offs 3×5 → 3×6 @ +47.5, so the six-rep ladder climbs in even
-  2.5 lb steps into the test instead of ending on a +5.
-- **A3** — the broad-jump measurement withdrawn; `META.targets.broad` is gone, weeks 1 and 12
-  carry no high-tier contacts, and week-12 Friday carries **no power work at all**. The
-  training jumps in weeks 5 and 7–11 stay.
-
-`tools/gen-block-doc.mjs` asserts all three are present in the generated program before it will
-publish the block document, and `test.mjs` mutation-guards each one. If you regenerate, the
-amendments come along; if you delete them from the generator, the doc build fails loudly.
+**COACHING AMENDMENTS A1–A3 are now IN THE SOURCE, not applied by the generator.** They were
+applied to v4.0-syn2 by `applyAmendments`; V3 carries their resolved form, decided by Brian on
+24 Sep:
+- **A1** — calves on both lower days (V3: ≥3 varied sets Monday and Friday) and a 2-set Friday
+  single-leg RDL are in. The Monday **lying leg curl was not adopted** (Brian: avoid machines —
+  "RDL vs hamstring curl"). Watch item for the faster sprint weeks 8–11.
+- **A2** — week-11 Sunday dip back-offs 3×6 @ +47.5 (even 2.5 lb steps into the +50×6 test).
+- **A3** — no broad-jump measurement; week-12 Friday carries **no power work and no
+  kettlebell complex** (approved exception E11).
+`tools/gen-block-doc.mjs` refuses to publish the program document unless all three
+resolutions are present, and `test.mjs` asserts each one.
 
 **The program is generated, the app is hand-written.** `src/program.js` is emitted once by
-`tools/gen-program.mjs` from `docs/source/SYNTHESIZED_PRESCRIPTIONS_V2.json` (48 sessions, 397 source rows
-→ 431 after the amendments above, 24 impact sessions). After that it is committed and **hand-edited by the
+`tools/gen-program.mjs` from `docs/source/SYNTHESIZED_PRESCRIPTIONS_V3.json` (48 sessions, 464 rows,
+24 impact sessions). Each session also carries its own cut order, sequencing checks and card notes
+(OHP anchor, longer pull-up set, test rules), which the app shows under "Sequencing checks and cut order". After that it is committed and **hand-edited by the
 weekly review** — it is
 this block's `WAVE`. **Never re-run the generator to apply a weekly change**; it would discard
 every accepted edit. Run it only to load a genuinely new block.
 
 **Sessions are a per-week table, not a day list with a load wave.** Composition varies by
-week: week 12 Wednesday carries no overhead press at all, and the three target tests replace
-Friday's ordinary exposures. So `SESSIONS[week][dayId]` holds the objective, the minute
+week: week-12 tests are split (OHP on Wednesday; dip then pull-up on Friday) and replace
+those days' ordinary exposures. So `SESSIONS[week][dayId]` holds the objective, the minute
 budget, the timed block plan, the impact script and the items. `DAYS` is only four shells.
 
 **Strings are interned — and the interning has bitten twice.** The plan repeats block
@@ -124,21 +119,21 @@ Two rules make it safe, and `tools/gen-program.mjs` now ASSERTS both:
 `window.storage.get/set` (async, `{key, value}` shape, `get` THROWS on missing key).
 `src/entry.jsx` shims it onto localStorage. Storage key: **`pp-tracker-v3`** — kept across all
 four programs deliberately, so no user data is destroyed by a program change. **Never change
-it.** One debounced (700 ms) save of a single JSON bundle. Backup `version` is now **16**.
+it.** One debounced (700 ms) save of a single JSON bundle. Backup `version` is now **16**; the week report is version **17**.
 
 **THE PROGRAM-COLLISION MIGRATION (do not remove).** Every saved bundle is stamped
-`program: "astra-synthesis-v4"` (`PROGRAM_ID`). A bundle carrying a different id was written by
+`program: "astra-synthesis-v5"` (`PROGRAM_ID`). A bundle carrying a different id was written by
 an earlier program, and its training data must not be inherited: `squat`, `dl`, `pullup` and
 `copen` are live ids in more than one program, so an old log would otherwise render as this
 block's prescription and as its "LAST WK" reference — wrong data, mid-session, on a priority
 lift. On detecting a foreign stamp the app moves the whole bundle into `archived`, starts this
 block's state clean, keeps theme / tone / vibrate / auto-rest, and resets `planName`.
 
-`archived` is a **LIST**, and that matters: this repo has had four programs, so archiving the
-v3 block must not clobber the two archives already inside it. Older saves held a
+`archived` is a **LIST**, and that matters: this repo has had five programs, so archiving the
+v4 block must not clobber the three archives already inside it. Older saves held a
 single object; `asArchiveList` lifts that shape into the list. The migration is idempotent — a
 bundle with no training data adds nothing, so re-opening cannot stack empty entries.
-`test.mjs` asserts all of it with a three-deep archive, including that every older one survives.
+`test.mjs` asserts all of it with a four-deep archive, including that every older one survives.
 
 **THE FOCUS-LOSS BUG (fixed; do not reintroduce).** Components were once defined *inline*
 inside the app component. Every state change — including every 250 ms timer tick — created new
@@ -183,9 +178,9 @@ anything is logged (a real bug caught in review). The V1 `primer` card is **gone
 replaced the generic kettlebell circuit with explicit daily power rows, which are ordinary
 set-grid cards carrying a power-quality control instead of bar speed.
 
-**The Friday broad jump is a prescribed row on the IMPACT clock** (`clock: "impact"`), not the
-strength clock. `exercisesFor` filters it out of the set grid and `impactItemsFor` renders it
-inside the impact card, because it is paid for out of the 15/30-minute budget.
+**No prescribed row sits on the impact clock in V3.** Plyometrics and sprints are counted on
+the impact card only; Friday's power exercise (double-KB clean) is on the strength clock.
+`impactItemsFor` is kept for safety and returns nothing.
 
 **The warm-up block is named "Warm-up" in V2, not "Preparation".** The header matched only
 the old name and silently read "0 min"; it now matches either, and `test.mjs` guards it.
@@ -206,81 +201,77 @@ first user gesture (`ensureAudio`) because browsers block autoplay.
   `cut-1st`) — green / slate / warn. The chips are the in-gym cut order.
 - Header (week strip, day tabs) is NOT sticky.
 - The week strip's bar heights are **derived** from each week's compound work-set count
-  (33 normally, 19 in week 6, 15 in week 12), not from an invented "intensity" percentage.
+  (36 normally, 23 in week 6, 15 in week 12), not from an invented "intensity" percentage.
 
 ## Program invariants (the tracker must enforce these)
 
-- **Sessions are Sunday / Monday / Wednesday / Friday.** Fresh slots: Sun = heavy dip double,
-  Mon = pull-up first then deadlift, Wed = strict OHP, Fri = jumps then squat.
-- **Three targets, not four**: OHP 125×2 · dip +50×6 · pull-up +45×5. The broad jump was
-  withdrawn (A3). They are caps at equal-or-higher reps.
-  A heavy *double* legitimately sits above the six-rep dip load — lowering reps while raising
-  load is one progression, not two. The cap compares like reps.
-- **The test session is week 12 FRIDAY** (`TEST_WEEK`/`TEST_DAY`), 94 minutes by design, with
-  **ten minutes** between tests (raised from five in V2 to protect the later ones).
-- **Week 13 is an OPTIONAL deferred-test slot** (`WEEK13`): not one of the 48, no deadlift,
-  never a retry of a completed or failed target, and its result is labelled week 13.
-- **Deadlift**: one exposure every 7 days on a fixed Monday, 12 exposures — ten heavy
-  (2×2 @ 450) and two light (1×2 @ 390 in weeks 6 and 12), **no max** (C01, C02).
-- **Volume floors** (§19), computed from the plan's OWN `work_set` flag: pressing 18 ·
-  vertical 9 · horizontal 6 · **press:pull ≤ 1.30** (1.20 normally) · direct biceps 4 sets.
-  Weeks 6 and 12 waive those four (C09). **Structural floors are never waived**: exactly 2
-  lower days · 3 shoulder days · **4 direct-abdominal days** · 4 power days · 4 unilateral
-  days · 2 adductor days · 2 dynamic-rotation patterns · 2 carry days (flexible).
-- **Read the plan's flags, never infer an exposure from `family`.** `direct_abdominal` spans
-  three families (abs, anti-rotation, dynamic rotation) — four exposure days, where counting
-  family `abs` gives two. The generator carries `workSet`, `power`, `unilateral`,
-  `lowerStrength`, `directAbs`, `shoulderHealth`, `directArm` and `dynamicRotation` through
-  for exactly this reason.
-- **Ramps, power, shoulder-health and core work do NOT inflate the pressing/pulling floors.**
-  That is what `workSet` is for, and the review export marks every row `countsTowardFloors`.
-- **Reserve floor**: 2 in a normal week (C08: ≥2 RIR, aiming for 2 — easier qualifies), 4 in
-  weeks 6 and 12. An RPE instruction ("RPE ≤4; fast intent") is an effort target, not a
-  reserve, so `rirTarget()` gives it no numeric floor and it never warns.
-- **Impact** (§12): **six high-tier contacts a week**, absent before week 5 — and now before
-  week 5 includes week 1, because the measurement that used to justify three maximal jumps
-  there is gone. **No impact session is flagged `test` any more.** Impact never lands on
-  Sunday or Monday.
-- **The impact clocks are HARD caps and differ by day**: Wednesday 15 min, Friday 30, both
-  starting before travel. `base + travel === cap` for all 24 impact sessions, and the event
-  seconds must sum to `base`. The fullest Wednesday leaves 65 seconds — the app shows a
-  "this is the tight one" warning whenever the allowance is ≤2 minutes.
-- **Running** (§13): Friday only, after the jumps and before lifting. **None in weeks 1 or
-  12.** Hill through week 8; flat only from week 9, and terrain is the *only* change at flat
-  entry. Ceiling **60 acceleration metres and 120 total metres**. Equal runout every rep.
-- **Power** (§ daily power): four days a week in weeks 1–11, **three in week 12** (the test
-  session carries none by design), with its own dose, rehearsal and stop rules.
-  Quality is the stop rule — a "stopped" movement is logged as **omitted**, not completed,
-  and cannot qualify a load increase. Most power items carry a text load, so they use the
-  power-quality control rather than bar speed.
-- **Copenhagen** (§14): knee-supported **short lever, 3×6 per side**, Monday and Friday,
-  every week including deloads.
-- **Biceps**: Sunday and Wednesday only, three recurring variation pairs at 2×8–12.
-  **No direct triceps anywhere** — `test.mjs` greps the rendered names for it.
-- **Time**: strength is a GUIDELINE (`META.strengthIsHardCap === false`). Block seconds must
-  sum to the session total. Fourteen ordinary sessions sit at 78–78.5 min after A1; the guard
-  is `META.strengthCeilingMinutes` (80) for ordinary sessions and exactly 94 for the test.
-- **Absolute exercise exclusions:** Turkish get-up · Bulgarian split squat · barbell RDL ·
-  dumbbell row · cable row · cable flye.
-- **Conflict hierarchy** (§5): tissue tolerance → OHP/dip/pull-up → prescribed TrainerRoad →
-  elastic and acceleration quality → heavy conventional specificity → squat/bench → secondary
-  volume.
+- **Sessions are Sunday / Monday / Wednesday / Friday**, dated from Sunday 27 Sep 2026. Fresh
+  slots (after the day's power exercise): Sun = heavy dip double, Mon = pull-up (weeks 7–11 the
+  longer target-rep set), Wed = strict OHP top double, Fri = low-bar squat.
+- **Three targets**: OHP 130×2 at RPE ≤9 · dip +50×6 and pull-up +45×5 at ≥2 RIR. They are caps
+  at equal-or-higher reps. Squat and deadlift are maintenance; plyometric capacity has no test.
+- **Week-12 tests are split** (`META.testDays` = wed, fri): OHP Wednesday; dip, **10 minutes**,
+  then pull-up on Friday. Wednesday has no dip or pull-up work (E5). Friday has no power work
+  and no kettlebell complex (E11).
+- **Week 13** (`WEEK13`): optional **Saturday 26 Dec**, deferred tests only, not one of the 48,
+  no deadlift, never a retry; its result is labelled week 13.
+- **Deadlift**: Monday only, 12 exposures — ten heavy (450 top double + 405 back-off double)
+  and two light (2×2 @ 390 in weeks 6 and 12), **no max** (C01, C02).
+- **OHP path**: Wednesday top double 117.5 → 127.5 (+2.5 at most every two weeks), no
+  calibration single — the 20 Sep 125×1 @ RPE 8.5 is the anchor.
+- **Volume floors**, from the plan's own `workSet` flag: pressing **16–20** (20 normally) ·
+  vertical 8 (9) · horizontal 6 (7) · **press:pull ≤ 1.30** (1.25 normally) · biceps 6 · triceps
+  6 · calves 6. Weeks 6 and 12 waive the volume floors (C09). **Structural floors are never
+  waived**: exactly 2 lower days · 3 shoulder days · 4 direct-abdominal days · 4 power days
+  (3 in week 12, E11) · 4 unilateral days · 2 adductor days · 2 dynamic-rotation patterns ·
+  2 carry days.
+- **Arms**: exactly one direct-arm exercise a session — biceps Sunday/Wednesday, triceps
+  Monday/Friday (`armKind`), 3×8–15 at 1–2 RIR (2 easy sets in weeks 6/12).
+- **Calves**: Monday (straight-knee) and Friday (bent-knee) only, ≥3 sets (exactly 2 in
+  weeks 6/12), rotating every three weeks.
+- **The two-set rule**: no exercise is ever done for a single set (target tests excepted); a
+  cut keeps ≥2 sets (`protectedSets`) or skips a whole optional exercise (`protectedSets: 0`,
+  only the Friday DB incline bench).
+- **Friday DB incline bench**: weeks 1–11, 2 sets, supersetted with the single-leg RDL; counts
+  toward pressing, offset by Sunday's 4th row set.
+- **Read the plan's flags, never infer an exposure from `family`.** The generator carries
+  `workSet`, `power`, `unilateral`, `lowerStrength`, `directAbs`, `shoulderHealth`,
+  `directArm`/`armKind`, `calf` and `dynamicRotation`, and computes `AUDIT` from those same
+  flags so the live audit and the table cannot disagree. The app's volume counter adds only the
+  three compound families to the floors (arm family names once double-counted arm sets).
+- **Reserve floor**: 2 in a normal week, 4 in weeks 6 and 12. An RPE instruction is an effort
+  target, not a reserve, so `rirTarget()` gives it no numeric floor.
+- **Impact**: Wednesday and Friday only. **Wednesday is a HARD 15 minutes**; Friday a ~30-minute
+  **target**; travel is not budgeted. Event seconds sum to `baseSeconds`; contacts by tier sum to
+  the session totals. **High tier follows `META.highContactCapByWeek`** (0 before week 5, 12 in
+  weeks 5 and 7, then 13 → 18); **≤15% weekly growth per tier** except the named week-5 entry and
+  week-7 restoration (C04). Weeks 6 and 12 are low tier only.
+- **Sprints**: Friday only, **every week**; hill through week 7, flat from week 8; one variable
+  per stage, each stage twice before advancing (C05); rest 2–3 min at ≤20 m; ceiling 250 m.
+- **Power**: four days a week (three in week 12). Quality is the stop rule — a "stopped"
+  movement is logged as **omitted** and cannot qualify a load increase.
+- **Copenhagen**: knee-supported **short lever, 3×6 per side**, Monday and Friday, every week.
+- **Time**: every session ≤ 75 minutes (`META.strengthIsHardCap === true`), a 300-s delay
+  reserve in each, and ≤ 75 even when every priority rest runs to 3:00 (`secondsIfMaxRests`).
+- **Absolute exercise exclusions:** Turkish get-up · Bulgarian split squat · bilateral barbell
+  RDL · cable flye. (Dumbbell and cable rows were allowed again on 23 Sep.)
+- **Conflict hierarchy**: tissue tolerance → OHP/dip/pull-up → prescribed TrainerRoad → squat →
+  jumping/sprinting → bench → deadlift → secondary volume.
 - **Out of scope — never add:** nutrition, TrainerRoad ride content, wearable-derived
   readiness rules. Never advance impact to compensate for a missed ride.
 
-`test.mjs` enforces every one of those mechanically, and each guard has been mutation-tested —
-the program was deliberately broken in 23 ways and every break was caught, each by the guard
-that should have caught it. `tools/gen-block-doc.mjs` additionally re-reads the verification
-tables *inside the program document*, re-adds every printed minute sum, and refuses to publish
-if any disagrees with the data.
+`test.mjs` enforces every one of those mechanically, and the V3 guards were mutation-tested
+when the block was loaded (each deliberate break was caught by the guard meant to catch it).
+`tools/gen-block-doc.mjs` refuses to publish the program document if the app's program
+disagrees with the V3 source or its verification.
 
 ## Weekly AI-review loop
 
-The **AI Analysis** button copies a structured week report (`buildReviewJSON`, version 16) to
+The **AI Analysis** button copies a structured week report (`buildReviewJSON`, version 17) to
 the clipboard: prescribed vs actual per lift with system loads, bar speed, power quality,
-`countsTowardFloors` per row, impact contacts by tier with each day's cap and travel
+`countsTowardFloors` per row, impact contacts by tier with each day's cap type and
 allowance, running reps and metres against the ceiling, adductor checks, the live volume
-audit, minute budgets against the guideline, and trailing history per loaded lift. Brian pastes it into Claude
+audit, minute budgets against the 75-minute hard limit, and trailing history per loaded lift. Brian pastes it into Claude
 Code, which applies `docs/autoregulation-criteria.md`, returns a plain-language brief, and — on
 approval — edits `src/program.js` and deploys. A text report is also available in Settings. No
 API calls from the app.

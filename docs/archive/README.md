@@ -4,7 +4,7 @@ Nothing in this folder is live. All of it is kept, none of it is deleted, and no
 numbers are interchangeable between programs: different sessions, different priority lifts,
 different anchor maxima, different deload and test structure.
 
-This repo has now carried four programs.
+This repo has now carried five programs.
 
 ## 1. Press-Priority Hybrid v1.3 — through July 2026
 
@@ -48,15 +48,26 @@ trained.
 | `autoregulation-criteria-synthesis-v3.md` | Its weekly-review decision lens |
 | `source-v1/source/` | That block's own planning artifacts, vendored read-only |
 
-## 4. Astra Synthesized Concurrent Block v4.0-syn2 — current
+## 4. Astra Synthesized Concurrent Block v4.0-syn2 — September 2026, two days
 
-Live. See [`../12-week-concurrent-block-v4.md`](../12-week-concurrent-block-v4.md).
+The V2 revision of the synthesized block: strength time as a guideline, a 30-minute Friday
+impact clock, explicit daily power work, biceps on two days, no direct triceps, small leg
+accessories, a week-13 contingency — plus coaching amendments A1–A3 applied in the app on 22
+September. Loaded on 22 September and superseded on 24 September by v5.0-syn3, before it was
+trained. 397 source rows (431 as run).
 
-It revises v3 after a review of the actual routine: strength time becomes a guideline rather
-than a hard cap, the Friday impact clock doubles to 30 minutes, the kettlebell circuit is
-replaced by explicit daily power work, biceps move to two days with a real progression rule,
-direct triceps are removed, small leg accessories are added on the two lower days, and a
-week-13 contingency is added for deferred tests. 397 rows.
+| File | What it is |
+|---|---|
+| `12-week-concurrent-block-v4.0-syn2.md` | The full program as the app ran it, amendments included |
+| `autoregulation-criteria-synthesis-v4.md` | Its weekly-review decision lens |
+| `source-v2/` | That block's own planning artifacts, vendored read-only |
+
+## 5. Astra Synthesized Concurrent Block v5.0-syn3 — current
+
+Live. See [`../12-week-concurrent-block-v5.md`](../12-week-concurrent-block-v5.md). A hard
+75-minute strength limit again, arms for size on four days, calves on both lower days, the
+two-set rule, a Friday DB incline bench, shorter rests, a restored plyometric and sprint
+progression, a 130×2 OHP goal, and split week-12 testing. A1–A3 are carried in its source.
 
 ---
 
@@ -65,4 +76,4 @@ week-13 contingency is added for deferred tests. 397 rows.
 Superseded program data is **not** deleted from the app either. When the tracker opens a
 save written by a different program it moves the whole of it into an `archived` list —
 preserved, carried along in every Backup, and never overwritten by a later migration. A
-phone that ran all four blocks ends up with three archived entries beneath the live one.
+phone that ran all five blocks ends up with four archived entries beneath the live one.

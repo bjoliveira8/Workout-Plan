@@ -1,6 +1,6 @@
 # Astra Synthesized Concurrent Block — Workout Tracker
 
-Single-file mobile workout tracker for the **Astra Synthesized Concurrent Block (v4.0-syn2)**,
+Single-file mobile workout tracker for the **Astra Synthesized Concurrent Block (v5.0-syn3)**,
 plus the full program document. Runs as a static page (GitHub Pages) and is used on iPhone via
 Safari → Add to Home Screen.
 
@@ -9,51 +9,52 @@ design rules this project must respect.
 
 ## What the block is
 
-Four strength sessions — **Sunday, Monday, Wednesday, Friday** — around three prescribed
-TrainerRoad rides. All jumping and running sits on a **separate clock** that starts before
-you travel: **15 minutes on Wednesday, 30 on Friday**. Those are hard limits. Strength time
-is a **guideline** of about 75 minutes, not a hard stop — most sessions run 66.5–73.5, and
-week-12 Friday is 94 minutes of testing by design.
+Twelve weeks from **Sunday, 27 September 2026**: four strength sessions — **Sunday, Monday,
+Wednesday, Friday** — around three prescribed TrainerRoad rides. Strength sessions have a
+**hard 75-minute limit** (5-minute delay reserve included; every session plans at 73.5 or
+less). Jumping and sprinting come first on Wednesday (**hard 15 minutes**) and Friday (**~30-minute
+target**); travel is not budgeted.
 
-- **Sunday** — daily power, heavy dip double and back-offs, paused bench, rows. Starts at
-  least six hours after the long ride finishes.
-- **Monday** — pull-ups first, then the week's one conventional deadlift, a moderate OHP,
-  Copenhagen and a reverse lunge.
-- **Wednesday** — impact block, then the overhead press in the freshest slot of the week.
-- **Friday** — impact and running, then low-bar squat, dip, pull-up and a single-leg hinge.
+- **Sunday** — plyo push-up or chest pass, heavy dip double and back-offs, paused bench,
+  one-arm chest-supported dumbbell rows, biceps with cable external rotation, core, farmer carry.
+- **Monday** — kettlebell complex and swings (snatches from week 7 if the gate is met),
+  pull-ups first, the week's conventional deadlift (top double + back-off), moderate OHP,
+  reverse lunge, Copenhagen with calves, rope pushdown with Pallof.
+- **Wednesday** — impact block, scoop throws, then the overhead press in the freshest slot,
+  pull-ups, one-arm dumbbell rows, biceps with face pulls, core, suitcase carry.
+- **Friday** — impact and hill/flat accelerations, double-KB cleans, low-bar squat, dips,
+  pull-ups, DB incline bench with single-leg RDL, Copenhagen with calves, overhead triceps with
+  prone Y, landmine rotation.
 
-Four targets: strict OHP **125×2**, weighted dip **+50×6**, neutral-grip pull-up **+45×5**, and
-standing broad jump **+4 inches** over the week-1 baseline. The three lifting targets want
-**≥2 reps in reserve, aiming for 2** — easier still counts. The jump figure is a goal, not a
-prediction. Deloads in weeks 6 and 12; **the block tests on week 12 Friday**, with an
-optional **week 13** reserved only for a test deferred before it was attempted.
+Three goals: strict OHP **130×2 at RPE ≤9**; weighted dip **+50×6** and neutral-grip pull-up
+**+45×5** at **≥2 reps in reserve**. Squat and deadlift are maintained; plyometric capacity
+progresses without a test. Deloads in weeks 6 and 12; **week-12 tests are split — OHP on
+Wednesday, dip and pull-up on Friday** — with an optional **Saturday, 26 December** slot only
+for a test deferred before it was attempted. No exercise is ever done for a single set.
 
 The tracker carries four domains beyond the barbell work:
 
-- **Impact block** — the full prescribed sequence with its time budget, so you can decide
-  before travelling whether it fits. Landings are logged per tier against the weekly target.
-  The high tier is capped at six contacts a week and is absent before week 5; weeks 1 and 12
-  run the three-attempt broad-jump measurement. The fullest Wednesday leaves only 65 seconds
-  for transit, and the card says so.
-- **Running** — Friday only, 0–3 short efforts, hill through week 8 and flat from week 9, with
-  the 60 m acceleration / 120 m total per-session ceiling shown on the card.
-- **Daily power** — one-arm cleans, swings, scoop throws and the Friday jumps, each with its
-  own dose and stop rules. Quality is the stop rule: a movement you stop is logged as
-  *omitted*, not completed, and cannot earn a load increase.
-- **Adductor gate** — a one-tap normal/abnormal check after the session and the next morning.
-  Abnormal raises a block-level banner and holds every running and high-tier progression. It
-  outranks every other rule in the block.
+- **Impact block** — the full prescribed sequence with its time budget. Contacts are logged per
+  tier against the weekly target; the high tier is absent before week 5 and follows the weekly
+  tier table after that (12 → 18).
+- **Sprints** — Friday every week, hill through week 7 and flat from week 8, one variable
+  changed per stage, 2–3 minutes between reps.
+- **Daily power** — each with its own dose and stop rules. Quality is the stop rule: a movement
+  you stop is logged as *omitted*, not completed, and cannot earn a load increase.
+- **Tissue gate** — a one-tap normal/abnormal check after the session and the next morning
+  (adductors, calves, Achilles). Abnormal raises a block-level banner and holds every sprint
+  and high-tier progression. It outranks every other rule in the block.
 
-Plus a live **volume-floor audit** computed straight from the prescriptions, so a floor cannot
-be broken silently, and the full **timed block plan** for each session.
+Plus a live **volume-floor audit** computed straight from the prescriptions, the full **timed
+block plan** for each session, and each day's **sequencing checks and cut order**.
 
 ## Status
 
-The plan is **not labeled approved** and its author does not claim otherwise. Twenty revision
-checks plus the original thirteen are documented
-in `docs/source/SYNTHESIS_VERIFICATION_V2.md`. The author's own grade is "A, provisionally",
-and the remaining uncertainty is whether the combined cycling, lifting and new power work
-fits actual recovery — which only training it will settle. See §0 of the program document.
+The plan is **ready for review, not approved**. Brian approved the design decisions on 23–24
+September 2026. `docs/source/SYNTHESIS_VERIFICATION_V3.md` records 92 written-program checks:
+0 failures, 9 passes under named approved exceptions, and 5 real-world unknowns (actual time,
+equipment, recovery, outcomes, snatch skill) that only training will settle. See §0 of the
+program document.
 
 ## Quick start
 
@@ -91,8 +92,8 @@ everything, archives included, across devices.
 - `tools/gen-program.mjs` — one-shot generator: source plan JSON → `src/program.js`
 - `tools/gen-block-doc.mjs` — one-shot generator for the program document, with a cross-check
   that refuses to publish if the document and the data disagree
-- `docs/12-week-concurrent-block-v4.md` — the training program (source of truth)
+- `docs/12-week-concurrent-block-v5.md` — the training program (source of truth)
 - `docs/autoregulation-criteria.md` — the weekly-review decision lens
-- `docs/source/` — the planning session's own artifacts, vendored read-only
-- `docs/archive/` — the three superseded programs and their sources, kept for reference
+- `docs/source/` — the V3 planning artifacts (data, block, cards, verification, change log, build scripts), vendored read-only
+- `docs/archive/` — the four superseded programs and their sources, kept for reference
 - `index.html` — the built file GitHub Pages serves (`dist/` is a local build artifact and is not committed)

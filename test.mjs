@@ -43,7 +43,7 @@ await wait(150);
 
 // 1) Core content renders — Sunday week 1 is the dip-priority session
 for (const p of ["FINISH SESSION", "＋ Add Set", "Weighted dip heavy double", "Weighted dip back-offs",
-                 "Paused bench press", "Chest-supported machine row", "WEEK 1"])
+                 "Paused bench press", "One-arm chest-supported dumbbell row (incline bench)", "WEEK 1"])
   if (!out().includes(p)) fail.push("content:" + p);
 
 // 2) YouTube icon button sits in the header actions next to the checkmark
@@ -152,11 +152,11 @@ if (!doc.querySelector(".sessionclock")) fail.push("session-clock-missing");
   if (w !== "35" || r !== "6") fail.push(`rxfill-partial=w:${w},r:${r}`);
   // An accessory with a text prescription has no number to fill — reps only, never an
   // invented weight.
-  const row = [...doc.querySelectorAll(".card")].find((c) => c.querySelector(".exname")?.textContent === "Chest-supported machine row");
+  const row = [...doc.querySelectorAll(".card")].find((c) => c.querySelector(".exname")?.textContent === "One-arm chest-supported dumbbell row (incline bench)");
   row.querySelector(".set-row .rxfill").click();
   await wait(120);
-  const aw = row.querySelector('input[aria-label="Chest-supported machine row set 1 weight"]').value;
-  const ar = row.querySelector('input[aria-label="Chest-supported machine row set 1 reps"]').value;
+  const aw = row.querySelector('input[aria-label="One-arm chest-supported dumbbell row (incline bench) set 1 weight"]').value;
+  const ar = row.querySelector('input[aria-label="One-arm chest-supported dumbbell row (incline bench) set 1 reps"]').value;
   if (aw !== "" || ar !== "8") fail.push(`rxfill-textload=w:${aw},r:${ar}`);
 }
 
@@ -178,12 +178,14 @@ tab("WED").click();
 await wait(150);
 if (!out().includes("Impact Block")) fail.push("impact-missing-wed");
 if (!out().includes("Adductor Check")) fail.push("addcheck-missing-wed");
-if (!out().includes("Strict OHP calibration")) fail.push("wed-w1-calibration-missing");
+if (!out().includes("Strict OHP top double")) fail.push("wed-w1-ohp-missing");
+if (out().includes("Strict OHP calibration")) fail.push("wed-w1-calibration-should-be-gone");
+if (!out().includes("OHP anchor")) fail.push("wed-w1-ohp-anchor-note-missing");
 if (doc.querySelector(".sprintcard")) fail.push("running-on-wednesday");
 
 // 8.5) Impact contacts log and persist, at the week's prescribed targets
 {
-  const low = doc.querySelector('input[aria-label="Low · bilateral pogos contacts completed"]');
+  const low = doc.querySelector('input[aria-label="Low · pogos / line hops contacts completed"]');
   if (!low) fail.push("impact-input-missing");
   else if (low.placeholder !== "40") fail.push("impact-target-w1-wed=" + low.placeholder);
   else {
@@ -208,31 +210,35 @@ if (doc.querySelector(".sprintcard")) fail.push("running-on-wednesday");
   }
 }
 
-// 8.7) Friday week 1 takes the jump baseline and runs NO running block.
+// 8.7) Friday week 1: no broad-jump test; hill accelerations from the first week, with
+//      the plan's own rest (120 s at ≤20 m) rather than a hard-coded one.
 tab("FRI").click();
 await wait(150);
 if (!out().includes("Low-bar squat")) fail.push("fri-squat-missing");
-if (doc.querySelector(".sprintcard")) fail.push("running-in-week-1");
+if (!doc.querySelector(".sprintcard")) fail.push("running-missing-w1");
+if (!out().includes("120 s between reps")) fail.push("run-rest-w1");
+if (!out().includes("Dumbbell incline bench press")) fail.push("fri-incline-missing");
 
 // 8.8) Friday week 5 runs the hill block with the ceiling shown.
 week(5).click();
 await wait(150);
 if (!doc.querySelector(".sprintcard")) fail.push("running-missing-w5");
-if (!out().includes("ceiling 60 / 120 m")) fail.push("run-ceiling-missing");
+if (!out().includes("ceiling 250 / 500 m")) fail.push("run-ceiling-missing");
 if (!out().includes("hill")) fail.push("w5-should-be-hill");
 
-// 8.9) Week 12 FRIDAY is the test session — not Wednesday.
+// 8.9) Week-12 tests are split: OHP on Wednesday; dip then pull-up on Friday.
 week(12).click();
 await wait(120);
 tab("WED").click();
 await wait(150);
-if (out().includes("target test")) fail.push("tests-on-wednesday");
+if (!out().includes("Strict OHP target test")) fail.push("testweek:wed-ohp-test-missing");
+if (out().includes("Weighted dip target test") || out().includes("Neutral-grip pull-up target test")) fail.push("testweek:wed-has-friday-tests");
 tab("FRI").click();
 await wait(200);
-for (const p of ["Strict OHP target test", "Weighted dip target test", "Neutral-grip pull-up target test",
-                 "No retries"])
+for (const p of ["Weighted dip target test", "Neutral-grip pull-up target test", "Test rules"])
   if (!out().includes(p)) fail.push("testweek:" + p);
-if (!doc.querySelector(".tab.testtab")) fail.push("test-tab-not-marked");
+if (out().includes("Strict OHP target test")) fail.push("testweek:fri-has-ohp-test");
+if (doc.querySelectorAll(".tab.testtab").length !== 2) fail.push("test-tabs-not-both-marked=" + doc.querySelectorAll(".tab.testtab").length);
 
 // 9) Structured JSON export (AI Analysis) is valid and versioned
 let copied = null;
@@ -246,7 +252,7 @@ else {
   await wait(150);
   try {
     const j = JSON.parse(copied);
-    if (j.version !== 16 || j.kind !== "week-report" || !Array.isArray(j.days)) fail.push("json-shape");
+    if (j.version !== 17 || j.kind !== "week-report" || !Array.isArray(j.days)) fail.push("json-shape");
     if (!j.volumeAudit || !j.phase || !j.targetRir || !j.source) fail.push("json-week-fields");
     if (j.days.length !== 4) fail.push("json-day-count");
     const sun = j.days.find((d) => d.day === "sun");
@@ -257,9 +263,11 @@ else {
     const wed = j.days.find((d) => d.day === "wed");
     if (!wed.impact || !Array.isArray(wed.impact.tiers)) fail.push("json-impact");
     const fri = j.days.find((d) => d.day === "fri");
-    if (fri.running !== null) fail.push("json-w1-running-should-be-null");
+    if (!fri.running || fri.running.reps !== 4) fail.push("json-w1-running");
+    if (!sun.minuteBudget || sun.minuteBudget.isHardCap !== true || sun.minuteBudget.limit !== 75) fail.push("json-hard-cap");
     if (!j.impactLedger || j.impactLedger.capOk !== true) fail.push("json-impact-ledger");
-    if (j.volumeAudit.press !== 18 || j.volumeAudit.ratio !== 1.2) fail.push("json-volume=" + j.volumeAudit.press + "/" + j.volumeAudit.ratio);
+    if (j.volumeAudit.press !== 20 || j.volumeAudit.ratio !== 1.25) fail.push("json-volume=" + j.volumeAudit.press + "/" + j.volumeAudit.ratio);
+    if (j.volumeAudit.triceps !== 6 || j.volumeAudit.biceps !== 6) fail.push("json-arms=" + j.volumeAudit.biceps + "/" + j.volumeAudit.triceps);
   } catch (e) { fail.push("json-parse"); }
 }
 
@@ -284,53 +292,51 @@ else {
   //     kettlebell primer. Most power items carry a text load, so the bar-speed row would
   //     never appear for them — quality is the stop rule and must be loggable.
   week(1).click(); await wait(90); tab("SUN").click(); await wait(150);
-  const kb = [...doc.querySelectorAll(".card")].find((c) => c.querySelector(".exname")?.textContent === "Single-arm kettlebell clean");
+  const kb = [...doc.querySelectorAll(".card")].find((c) => c.querySelector(".exname")?.textContent === "Plyometric push-up (hands leave the floor)");
   if (!kb) fail.push("power-card-missing");
   else {
-    const q = kb.querySelector('[aria-label="Single-arm kettlebell clean power quality crisp"]');
+    const q = kb.querySelector('[aria-label="Plyometric push-up (hands leave the floor) power quality crisp"]');
     if (!q) fail.push("power-quality-control-missing");
     else {
       q.click(); await wait(900);
       const s = window.localStorage.getItem("pp-tracker-v3") || "";
       if (!s.includes('"powerQual"') || !s.includes("crisp")) fail.push("power-quality-persist");
     }
-    const stop = kb.querySelector('[aria-label="Single-arm kettlebell clean power quality stopped"]');
+    const stop = kb.querySelector('[aria-label="Plyometric push-up (hands leave the floor) power quality stopped"]');
     stop.click(); await wait(120);
     if (!kb.textContent.includes("omitted")) fail.push("stopped-power-not-marked-omitted");
     q.click(); await wait(80);
     // A power item must NOT offer the bar-speed control.
     if (kb.querySelector('[aria-label$="bar speed fast"]')) fail.push("power-shows-bar-speed");
   }
-  // (b) Impact caps differ by day in this block: Wednesday 15 min, Friday 30.
+  // (b) Impact: Wednesday is a HARD 15 minutes, Friday a ~30-minute TARGET. No travel budget.
   tab("WED").click(); await wait(150);
-  if (!out().includes("15-min clock")) fail.push("wed-cap-not-15");
+  if (!out().includes("15-min hard limit")) fail.push("wed-cap-not-15-hard");
   week(2).click(); await wait(90); tab("FRI").click(); await wait(180);
-  if (!out().includes("30-min clock")) fail.push("fri-cap-not-30");
+  if (!out().includes("30-min target")) fail.push("fri-cap-not-30-target");
+  if (out().includes("left for travel")) fail.push("travel-budget-still-shown");
   // The impact card must print the prescribed event sequence, which is what makes the
   // cut decision possible BEFORE travelling.
   if (!out().includes("Preparation")) fail.push("impact-events-missing");
-  // (b2) The fullest Wednesday leaves only 65 seconds for travel inside the 15-minute
-  //      clock. That is the session most likely to overrun, so the card must say so
-  //      BEFORE the athlete leaves, not after.
-  week(5).click(); await wait(90); tab("WED").click(); await wait(180);
+  // (b2) The high-tier ceiling follows the weekly tier table (18 in week 11), counted
+  //      across both impact days.
+  week(11).click(); await wait(90); tab("FRI").click(); await wait(180);
   {
     const card = [...doc.querySelectorAll(".card")].find((c) => c.querySelector(".exname")?.textContent === "Impact Block");
-    if (!card) fail.push("w5-wed-impact-missing");
-    else {
-      if (!card.textContent.includes("This is the tight one")) fail.push("tight-impact-warning-missing");
-      if (!card.textContent.includes("1.1 min")) fail.push("tight-impact-travel-figure");
-    }
+    if (!card) fail.push("w11-fri-impact-missing");
+    else if (!card.textContent.includes("week high tier 18 / cap 18")) fail.push("w11-high-cap-display");
   }
 
-  // (c) Strength time is a guideline, and week-12 Friday is over it by design.
+  // (c) Strength time is a HARD 75-minute limit — week-12 Friday included.
   week(12).click(); await wait(90); tab("FRI").click(); await wait(200);
-  if (!out().includes("by design")) fail.push("w12-over-guideline-not-flagged");
-  if (!out().includes("94")) fail.push("w12-fri-minutes-missing");
+  if (!out().includes("75-min hard limit")) fail.push("w12-hard-limit-not-shown");
+  if (out().includes("over the 75-min")) fail.push("w12-fri-over-limit");
+  if (!out().includes("Sequencing checks and cut order")) fail.push("session-rules-panel-missing");
   // (d) Week 13 is reachable, optional, and refuses to be a retry.
   const cols = [...doc.querySelectorAll(".wave-col")];
   if (cols.length !== 13) fail.push("week-strip-count=" + cols.length);
   cols[12].click(); await wait(220);
-  for (const p of ["Not a retry", "deferred", "FINISH WEEK 13"])
+  for (const p of ["Not a retry", "deferred", "FINISH WEEK 13", "Saturday, 26 December 2026"])
     if (!out().includes(p)) fail.push("w13:" + p);
   if (!out().includes("no thirteenth deadlift") && !out().includes("No thirteenth deadlift")) fail.push("w13-deadlift-note-missing");
   // (d2) The warm-up header must show real minutes and the named drills. V2 renamed the
@@ -348,15 +354,15 @@ else {
     }
   }
 
-  // (e) Biceps appear on Sunday and Wednesday only, and no direct triceps anywhere.
+  // (e) Arms: biceps on Sunday and Wednesday only, triceps on Monday and Friday only.
   week(1).click(); await wait(90);
-  for (const [d, want] of [["SUN", true], ["MON", false], ["WED", true], ["FRI", false]]) {
+  for (const [d, arm] of [["SUN", "biceps"], ["MON", "triceps"], ["WED", "biceps"], ["FRI", "triceps"]]) {
     tab(d).click(); await wait(140);
-    const hasBiceps = [...doc.querySelectorAll(".session .card")].some(
-      (c) => [...c.querySelectorAll(".tag")].some((t) => t.textContent.trim() === "biceps"));
-    if (hasBiceps !== want) fail.push(`biceps-day:${d}=${hasBiceps}`);
-    if ([...doc.querySelectorAll(".exname")].some((e) => /press-?down|triceps/i.test(e.textContent)))
-      fail.push(`direct-triceps-rendered:${d}`);
+    const tags = [...doc.querySelectorAll(".session .card .tag")].map((x) => x.textContent.trim());
+    for (const k of ["biceps", "triceps"]) {
+      const has = tags.includes(k);
+      if (has !== (k === arm)) fail.push(`arm-day:${d}-${k}=${has}`);
+    }
   }
   week(1).click(); await wait(90); tab("SUN").click(); await wait(150);
 }
@@ -379,15 +385,16 @@ else {
 
 /* ═══════════ B. PROGRAM INVARIANTS ═══════════ */
 
-// 12) The rails of the synthesized block, read straight from the generated program.
+// 12) The rails of the V3 block, read straight from the generated program.
 {
   const P = await import("./src/program.js");
   const { SESSIONS, IMPACT, AUDIT, META, WEEK13, SOURCE } = P;
   const DAYS = ["sun", "mon", "wed", "fri"];
+  const NORMAL = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11];
   const allItems = (w) => DAYS.flatMap((d) => SESSIONS[w][d].items.map((i) => ({ ...i, day: d })));
   const find = (w, d, id) => SESSIONS[w][d].items.find((i) => i.id === id);
 
-  // Shape: 48 sessions, 397 rows, 24 impact sessions.
+  // Shape: 48 sessions, row count from the source, 24 impact sessions, V3 program id.
   let sessions = 0, rows = 0;
   for (let w = 1; w <= 12; w++) for (const d of DAYS) {
     if (!SESSIONS[w]?.[d]) { fail.push(`missing-session:w${w}-${d}`); continue; }
@@ -395,28 +402,34 @@ else {
   }
   if (sessions !== 48) fail.push("session-count=" + sessions);
   if (rows !== SOURCE.rows) fail.push(`row-count=${rows}, source says ${SOURCE.rows}`);
+  if (SOURCE.impactSessions !== 24) fail.push("impact-session-count");
+  if (META.programId !== "astra-synthesis-v5" || META.blockVersion !== "v5.0-syn3") fail.push("program-id");
 
-  // Every exercise id must be a STRING. String interning once shipped all 397 of them as
-  // integers, which would have broken log keys, rest lookups and alt swaps against real
-  // saved data without any visible error.
+  // Every id is a STRING (interning once shipped them as integers), and prose fields are text.
   for (let w = 1; w <= 12; w++) for (const it of allItems(w)) {
     if (typeof it.id !== "string") fail.push(`non-string-id:w${w}-${it.day}=${typeof it.id}`);
     if (typeof it.name !== "string" || !it.name) fail.push(`bad-name:w${w}-${it.day}`);
+    for (const k of ["purpose", "rir"]) if (typeof it[k] !== "string") fail.push(`non-string-${k}:w${w}-${it.day}-${it.id}`);
+  }
+  for (let w = 1; w <= 12; w++) for (const d of DAYS) {
+    const s = SESSIONS[w][d];
+    for (const k of ["objective", "cuts", "sequencing"]) if (typeof s[k] !== "string" || s[k].length < 20) fail.push(`session-${k}:w${w}-${d}`);
+    for (const n of s.notes || []) if (typeof n.text !== "string") fail.push(`note-text:w${w}-${d}`);
   }
   for (const t of WEEK13.tests) if (typeof t.id !== "string") fail.push("w13-non-string-id");
 
-  // The app's live audit must agree with the source plan's own audit, every week.
-  // A PRODUCTIVE work set is the plan's `work_set` flag — power, ramps, shoulder-health
-  // and core work are real training but must NOT inflate the pressing/pulling floors.
+  // The app's live audit must agree with the generated audit, every week.
   for (let w = 1; w <= 12; w++) {
     const a = AUDIT[w];
     const s = { press: 0, vertical: 0, horizontal: 0 };
-    let biceps = 0;
+    let biceps = 0, triceps = 0, calves = 0;
     const days = { lower: new Set(), shoulder: new Set(), abs: new Set(), adductor: new Set(),
                    carry: new Set(), unilateral: new Set(), power: new Set() };
     allItems(w).forEach((i) => {
       if (i.workSet && s[i.family] != null) s[i.family] += i.sets;
-      if (i.directArm) biceps += i.sets;
+      if (i.armKind === "biceps") biceps += i.sets;
+      if (i.armKind === "triceps") triceps += i.sets;
+      if (i.calf) calves += i.sets;
       if (i.lowerStrength) days.lower.add(i.day);
       if (i.shoulderHealth) days.shoulder.add(i.day);
       if (i.directAbs) days.abs.add(i.day);
@@ -425,236 +438,269 @@ else {
       if (i.power) days.power.add(i.day);
       if (i.unilateral) days.unilateral.add(i.day);
     });
-    if (s.press !== a.press) fail.push(`audit-press:w${w}=${s.press}!=${a.press}`);
-    if (s.vertical !== a.vertical) fail.push(`audit-vertical:w${w}=${s.vertical}!=${a.vertical}`);
-    if (s.horizontal !== a.horizontal) fail.push(`audit-horizontal:w${w}=${s.horizontal}!=${a.horizontal}`);
-    if (biceps !== a.biceps) fail.push(`audit-biceps:w${w}=${biceps}!=${a.biceps}`);
-    if (Math.abs(s.press / (s.vertical + s.horizontal) - a.ratio) > 1e-6) fail.push(`audit-ratio:w${w}`);
-    if (days.lower.size !== a.lower) fail.push(`audit-lower-days:w${w}=${days.lower.size}!=${a.lower}`);
-    if (days.shoulder.size !== a.shoulder) fail.push(`audit-shoulder-days:w${w}=${days.shoulder.size}!=${a.shoulder}`);
-    if (days.abs.size !== a.abs) fail.push(`audit-abs-days:w${w}=${days.abs.size}!=${a.abs}`);
-    if (days.power.size !== a.powerDays) fail.push(`audit-power-days:w${w}=${days.power.size}!=${a.powerDays}`);
-    if (days.unilateral.size !== a.unilateral) fail.push(`audit-unilateral-days:w${w}=${days.unilateral.size}!=${a.unilateral}`);
-    if (days.carry.size !== a.carry) fail.push(`audit-carry-days:w${w}=${days.carry.size}!=${a.carry}`);
-    if (days.adductor.size !== a.adductor) fail.push(`audit-adductor-days:w${w}=${days.adductor.size}!=${a.adductor}`);
+    const chk = (k, v) => { if (v !== a[k]) fail.push(`audit-${k}:w${w}=${v}!=${a[k]}`); };
+    chk("press", s.press); chk("vertical", s.vertical); chk("horizontal", s.horizontal);
+    chk("biceps", biceps); chk("triceps", triceps); chk("calves", calves);
+    chk("lower", days.lower.size); chk("shoulder", days.shoulder.size); chk("abs", days.abs.size);
+    chk("adductor", days.adductor.size); chk("carry", days.carry.size); chk("unilateral", days.unilateral.size);
+    chk("powerDays", days.power.size);
+    if (Math.abs(Math.round((s.press / (s.vertical + s.horizontal)) * 1000) / 1000 - a.ratio) > 1e-9) fail.push(`audit-ratio:w${w}`);
   }
 
-  // Normal weeks: 18 pressing, 9 vertical, 6 row, ratio 1.200, 4 biceps sets.
-  for (const w of [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]) {
+  // Normal weeks: 20 press / 9 vertical / 7 horizontal (ratio 1.25), 6 biceps, 6 triceps, 6 calf sets.
+  for (const w of NORMAL) {
     const a = AUDIT[w];
-    if (a.press !== 18 || a.vertical !== 9 || a.horizontal !== 6) fail.push(`normal-volume:w${w}`);
-    if (Math.abs(a.ratio - 1.2) > 1e-9) fail.push(`normal-ratio:w${w}=${a.ratio}`);
-    if (a.ratio > META.floors.ratioMax) fail.push(`ratio-over-cap:w${w}`);
-    if (a.biceps !== 4) fail.push(`normal-biceps:w${w}=${a.biceps}`);
+    if (a.press !== 20 || a.vertical !== 9 || a.horizontal !== 7) fail.push(`normal-volume:w${w}=${a.press}/${a.vertical}/${a.horizontal}`);
+    if (a.press < META.floors.press || a.press > META.floors.pressMax) fail.push(`press-band:w${w}`);
+    if (Math.abs(a.ratio - 1.25) > 1e-9 || a.ratio > META.floors.ratioMax) fail.push(`normal-ratio:w${w}=${a.ratio}`);
+    if (a.biceps !== 6 || a.triceps !== 6) fail.push(`normal-arms:w${w}=${a.biceps}/${a.triceps}`);
+    if (a.calves !== 6) fail.push(`normal-calves:w${w}=${a.calves}`);
   }
-  if (AUDIT[6].press !== 10 || AUDIT[12].press !== 7) fail.push("reduced-press-volume");
-  if (AUDIT[6].biceps !== 2 || AUDIT[12].biceps !== 2) fail.push("reduced-biceps-volume");
-  // STRUCTURAL floors hold in EVERY week, reduced weeks included (C09 waives only the
-  // three reduced volumes, never the exposure counts).
+  if (AUDIT[6].press !== 12 || AUDIT[12].press !== 8) fail.push(`reduced-press=${AUDIT[6].press}/${AUDIT[12].press}`);
+  for (const w of [6, 12]) {
+    if (AUDIT[w].ratio > META.floors.ratioMax) fail.push(`reduced-ratio:w${w}`);
+    if (AUDIT[w].biceps !== 4 || AUDIT[w].triceps !== 4 || AUDIT[w].calves !== 4) fail.push(`reduced-accessories:w${w}`);
+  }
+  // Structural floors hold every week; week 12 has 3 power days by approved exception E11.
   for (let w = 1; w <= 12; w++) {
     const a = AUDIT[w];
     if (a.lower !== 2) fail.push(`lower-days:w${w}=${a.lower}`);
     if (a.shoulder < 3) fail.push(`shoulder-days:w${w}=${a.shoulder}`);
     if (a.abs < 4) fail.push(`abs-days:w${w}=${a.abs}`);
     if (a.adductor !== 2) fail.push(`adductor-days:w${w}=${a.adductor}`);
-    // Week 12 Friday carries no power work: the session is three maximal tests.
-    const wantPower = w === 12 ? 3 : 4;
-    if (a.powerDays !== wantPower) fail.push(`power-days:w${w}=${a.powerDays}, want ${wantPower}`);
+    if (a.carry < 2) fail.push(`carry-days:w${w}=${a.carry}`);
+    if (a.powerDays !== (w === 12 ? 3 : 4)) fail.push(`power-days:w${w}=${a.powerDays}`);
     if (a.unilateral !== 4) fail.push(`unilateral-days:w${w}=${a.unilateral}`);
     if (a.patterns.length !== 2) fail.push(`dynamic-patterns:w${w}=${a.patterns.length}`);
   }
-  // No direct triceps anywhere — the approved arm redesign removed it entirely.
-  for (let w = 1; w <= 12; w++) for (const i of allItems(w))
-    if (/triceps|press-?down|skull|kickback/i.test(i.name)) fail.push(`direct-triceps:w${w}=${i.name}`);
+  // Lower-body strength lives on Monday and Friday only.
+  for (let w = 1; w <= 12; w++) for (const d of ["sun", "wed"])
+    if (SESSIONS[w][d].items.some((i) => i.lowerStrength)) fail.push(`lower-on-upper-day:w${w}-${d}`);
 
-  // Week-12 targets are exact, and no training set may exceed them at equal or higher
-  // reps. A heavy DOUBLE legitimately sits above the six-rep dip load; the cap compares
-  // like reps, not raw load.
-  const t = { ohp: 125, dip: 50, pullup: 45 };
-  const testFri = SESSIONS[12].fri.items;
-  const tOhp = testFri.find((i) => i.name === "Strict OHP target test");
-  const tDip = testFri.find((i) => i.name === "Weighted dip target test");
-  const tPull = testFri.find((i) => i.name === "Neutral-grip pull-up target test");
-  if (!tOhp || tOhp.load !== 125 || tOhp.repsNum !== 2 || tOhp.sets !== 1) fail.push("test-ohp");
+  // Direct arms: exactly one exercise per session — biceps Sun/Wed, triceps Mon/Fri.
+  const ARM = { sun: "biceps", mon: "triceps", wed: "biceps", fri: "triceps" };
+  for (let w = 1; w <= 12; w++) for (const d of DAYS) {
+    const arms = SESSIONS[w][d].items.filter((i) => i.directArm).map((i) => i.armKind);
+    if (arms.length !== 1 || arms[0] !== ARM[d]) fail.push(`arms:w${w}-${d}=${arms.join("/")}`);
+  }
+  // Calves Monday and Friday only: ≥3 sets in normal weeks, exactly 2 in weeks 6 and 12.
+  for (let w = 1; w <= 12; w++) for (const d of DAYS) {
+    const c = SESSIONS[w][d].items.filter((i) => i.calf);
+    if (d === "sun" || d === "wed") { if (c.length) fail.push(`calves-on-upper-day:w${w}-${d}`); continue; }
+    if (c.length !== 1) { fail.push(`calf-missing:w${w}-${d}`); continue; }
+    if ((w === 6 || w === 12) ? c[0].sets !== 2 : c[0].sets < 3) fail.push(`calf-sets:w${w}-${d}=${c[0].sets}`);
+  }
+
+  // Brian's rule: no exercise is ever done for fewer than 2 sets (one-set target tests
+  // excepted), and a cut keeps ≥2 sets or skips the whole optional exercise.
+  const base = (n) => n.replace(/ (top double|back-off doubles|back-off double|back-offs|heavy double|target-rep practice|triples)$/, "")
+                       .replace(/ \((moderate|light technique, C02)\)$/, "");
+  for (let w = 1; w <= 12; w++) for (const d of DAYS) {
+    const g = {};
+    for (const i of SESSIONS[w][d].items) {
+      if (i.test) continue;
+      g[base(i.name)] = (g[base(i.name)] || 0) + i.sets;
+      if (i.cut !== "never" && !(i.protectedSets === 0 || i.protectedSets >= 2)) fail.push(`cut-to-one-set:w${w}-${d}-${i.id}`);
+    }
+    for (const [k, n] of Object.entries(g)) if (n < 2) fail.push(`single-set:w${w}-${d}-${k}`);
+  }
+
+  // Friday DB incline bench (Brian, 24 Sep): weeks 1–11, 2 sets, supersetted with the single-leg RDL.
+  for (let w = 1; w <= 12; w++) {
+    const inc = find(w, "fri", "inclinedb");
+    for (const d of ["sun", "mon", "wed"]) if (find(w, d, "inclinedb")) fail.push(`incline-off-friday:w${w}-${d}`);
+    if (w === 12) { if (inc) fail.push("incline-on-test-day"); continue; }
+    if (!inc || inc.sets !== 2 || inc.family !== "press") fail.push(`incline:w${w}`);
+    else if (!/single-leg RDL/.test(inc.supersetWith || "")) fail.push(`incline-not-supersetted:w${w}`);
+  }
+
+  // Week-12 tests: OHP 130×2 Wednesday; dip +50×6 then pull-up +45×5 Friday; nothing in front of them.
+  const w12w = SESSIONS[12].wed.items, w12f = SESSIONS[12].fri.items;
+  const tOhp = w12w.find((i) => i.name === "Strict OHP target test");
+  const tDip = w12f.find((i) => i.name === "Weighted dip target test");
+  const tPull = w12f.find((i) => i.name === "Neutral-grip pull-up target test");
+  if (!tOhp || tOhp.load !== 130 || tOhp.repsNum !== 2 || tOhp.sets !== 1) fail.push("test-ohp");
   if (!tDip || tDip.load !== 50 || tDip.repsNum !== 6 || tDip.sets !== 1) fail.push("test-dip");
   if (!tPull || tPull.load !== 45 || tPull.repsNum !== 5 || tPull.sets !== 1) fail.push("test-pullup");
-  if (META.testDay !== "fri" || META.testWeek !== 12) fail.push("test-session-placement");
+  if (tDip && tPull && w12f.indexOf(tDip) > w12f.indexOf(tPull)) fail.push("test-order");
+  if (w12f.some((i) => i.power)) fail.push("power-before-friday-tests");                  // A3 / E11
+  if (SESSIONS[12].fri.blocks[0].drills?.some((d) => /KB complex/.test(d))) fail.push("kb-complex-before-friday-tests");
+  if (w12w.some((i) => i.family === "vertical" || /dip/i.test(i.name))) fail.push("dip-or-pullup-on-w12-wednesday");
+  if (JSON.stringify(META.testDays) !== '["wed","fri"]' || META.testWeek !== 12) fail.push("test-session-placement");
+  const recov = SESSIONS[12].fri.blocks.filter((b) => /Passive recovery between tests/.test(b.name));
+  if (recov.length !== 1 || recov[0].seconds !== 600) fail.push("w12-recovery-between-tests");
+  if (META.targets.ohp !== "130 × 2" || META.targets.dip !== "+50 × 6" || META.targets.pullup !== "+45 × 5" || META.targets.broad) fail.push("targets");
+  // No training set exceeds a target at equal or higher reps.
   const capAtReps = [
-    { re: /OHP/i, reps: 2, cap: t.ohp, label: "ohp" },
-    { re: /dip/i, reps: 6, cap: t.dip, label: "dip" },
-    { re: /pull-up/i, reps: 5, cap: t.pullup, label: "pullup" },
+    { re: /OHP/i, reps: 2, cap: 130, label: "ohp" },
+    { re: /\bdip\b/i, reps: 6, cap: 50, label: "dip" },
+    { re: /pull-up/i, reps: 5, cap: 45, label: "pullup" },
   ];
   for (let w = 1; w <= 12; w++) for (const i of allItems(w)) {
     if (i.load == null || typeof i.repsNum !== "number") continue;
-    for (const c of capAtReps) {
-      if (c.re.test(i.name) && i.repsNum >= c.reps && i.load > c.cap)
-        fail.push(`cap-${c.label}:w${w}-${i.day}=${i.repsNum}rep@${i.load}>${c.cap}`);
+    for (const c of capAtReps)
+      if (c.re.test(i.name) && i.repsNum >= c.reps && i.load > c.cap) fail.push(`cap-${c.label}:w${w}-${i.day}=${i.repsNum}rep@${i.load}`);
+  }
+
+  // OHP path (approved table): Wednesday top double 117.5 → 127.5; no calibration single.
+  const OHP_WED = { 1: 117.5, 2: 117.5, 3: 120, 4: 120, 5: 122.5, 7: 122.5, 8: 122.5, 9: 125, 10: 125, 11: 127.5 };
+  for (const [w, top] of Object.entries(OHP_WED)) {
+    const t = find(+w, "wed", "ohptop");
+    if (!t || t.load !== top || t.repsNum !== 2 || t.sets !== 1) fail.push(`ohp-path:w${w}`);
+  }
+  for (let w = 1; w <= 12; w++) for (const i of allItems(w)) if (/calibration/i.test(i.name)) fail.push(`calibration-single:w${w}`);
+
+  // Amendment A2 — the dip six-rep ladder climbs in even 2.5 lb steps into the +50 test.
+  {
+    const sixes = [];
+    for (let w = 1; w <= 11; w++) { const b = find(w, "sun", "dipback"); if (b && b.repsNum === 6) sixes.push(b.load); }
+    const last = sixes[sixes.length - 1];
+    if (last !== 47.5) fail.push(`dip-last-six=${last}, want 47.5`);
+    if (tDip && tDip.load - last !== 2.5) fail.push(`dip-final-step=${tDip.load - last}`);
+    for (let i = 1; i < sixes.length; i++) {
+      const step = sixes[i] - sixes[i - 1];
+      if (step !== 0 && step !== 2.5) fail.push(`dip-uneven-step:${sixes[i - 1]}->${sixes[i]}`);
     }
   }
-
-  // Deadlift: one exposure every week on a fixed Monday = 12, ten heavy plus two light,
-  // and no max anywhere (C01, C02).
-  let dlCount = 0, heavy = 0, light = 0;
+  // Amendment A1 as resolved on 24 Sep: 2-set lunge and single-leg RDL, calves (above), NO leg curl.
   for (let w = 1; w <= 12; w++) {
-    const dl = find(w, "mon", "dl");
+    if (find(w, "mon", "legcurl")) fail.push(`legcurl-present:w${w}`);
+    const sl = find(w, "fri", "slrdl"), lg = find(w, "mon", "lunge");
+    if (!sl || sl.sets < 2) fail.push(`slrdl:w${w}`);
+    if (!lg || lg.sets < 2) fail.push(`lunge:w${w}`);
+  }
+
+  // Deadlift: Monday only, 12 exposures — 10 heavy (450 top + 405 back-off), 2 light (2×2 @ 390).
+  let heavy = 0, light = 0;
+  for (let w = 1; w <= 12; w++) {
+    const dl = find(w, "mon", "dl"), back = find(w, "mon", "dlback");
     if (!dl) { fail.push(`dl-missing:w${w}`); continue; }
-    dlCount++;
-    if (dl.load === 450 && dl.sets === 2 && dl.repsNum === 2) heavy++;
-    else if (dl.load === 390 && dl.sets === 1 && dl.repsNum === 2) light++;
-    else fail.push(`dl-unexpected:w${w}=${dl.sets}x${dl.repsNum}@${dl.load}`);
+    if (dl.load === 450 && dl.sets === 1 && back && back.load === 405 && back.sets === 1) heavy++;
+    else if (dl.load === 390 && dl.sets === 2 && !back) light++;
+    else fail.push(`dl-unexpected:w${w}`);
     for (const d of ["sun", "wed", "fri"]) if (find(w, d, "dl")) fail.push(`dl-off-monday:w${w}-${d}`);
   }
-  if (dlCount !== 12) fail.push("dl-exposures=" + dlCount);
-  if (heavy !== 10) fail.push("dl-heavy=" + heavy);
-  if (light !== 2) fail.push("dl-light=" + light);
+  if (heavy !== 10 || light !== 2) fail.push(`dl-split=${heavy}/${light}`);
   if (WEEK13.deadliftExposures !== 0) fail.push("w13-has-deadlift");
 
-  // Reduced weeks must actually reduce: week 6 loads at or below week 5 on every lift.
+  // Reduced weeks must reduce: week 6 loads at or below week 5 on every lift.
   for (const d of DAYS) for (const i of SESSIONS[5][d].items) {
     if (i.load == null) continue;
     const six = find(6, d, i.id);
     if (six && six.load != null && six.load > i.load) fail.push(`deload-not-lighter:${d}-${i.id}`);
   }
 
-  // Impact (§12): six high-tier TRAINING contacts a week, absent before week 5. Weeks 1
-  // and 12 carry three maximal broad jumps as the approved C03 measurement exception.
-  // Impact never lands on Sunday or Monday, and the caps differ by day: Wed 15, Fri 30.
+  // Impact: Wednesday and Friday only; Wednesday ≤15 min HARD; Friday ~30 min target;
+  // contacts add up; high tier matches the weekly table and is absent before week 5.
+  const tiers = (w) => ({ low: IMPACT[w].wed.low + IMPACT[w].fri.low,
+                          moderate: IMPACT[w].wed.moderate + IMPACT[w].fri.moderate,
+                          high: IMPACT[w].wed.high + IMPACT[w].fri.high });
   for (let w = 1; w <= 12; w++) {
     const wed = IMPACT[w]?.wed, fri = IMPACT[w]?.fri;
     if (!wed || !fri) { fail.push(`impact-missing:w${w}`); continue; }
     if (IMPACT[w].sun || IMPACT[w].mon) fail.push(`impact-wrong-day:w${w}`);
-    if (wed.capSeconds !== META.impactCapMinutes.wed * 60) fail.push(`wed-cap:w${w}=${wed.capSeconds}`);
-    if (fri.capSeconds !== META.impactCapMinutes.fri * 60) fail.push(`fri-cap:w${w}=${fri.capSeconds}`);
-    const high = wed.high + fri.high;
-    if (high > META.highContactCap) fail.push(`high-contacts:w${w}=${high}`);
-    // The prescribed work must fit inside the cap with travel left over.
+    if (wed.capType !== "hard" || wed.capSeconds !== 900) fail.push(`wed-cap:w${w}`);
+    if (fri.capType !== "target" || fri.capSeconds !== 1800) fail.push(`fri-cap:w${w}`);
+    if (wed.baseSeconds > 900) fail.push(`wed-over-15:w${w}=${wed.baseSeconds}`);
+    if (fri.baseSeconds > 1800) fail.push(`fri-over-30:w${w}=${fri.baseSeconds}`);
     for (const [lbl, im] of [["wed", wed], ["fri", fri]]) {
-      if (im.baseSeconds > im.capSeconds) fail.push(`impact-over-cap:w${w}-${lbl}`);
-      if (im.baseSeconds + im.travelSeconds !== im.capSeconds) fail.push(`impact-travel-math:w${w}-${lbl}`);
-      const evSum = im.events.reduce((a, e) => a + e.seconds, 0);
-      if (evSum !== im.baseSeconds) fail.push(`impact-event-sum:w${w}-${lbl}=${evSum}!=${im.baseSeconds}`);
+      if (im.events.reduce((a, e) => a + e.seconds, 0) !== im.baseSeconds) fail.push(`impact-event-sum:w${w}-${lbl}`);
+      if (im.test) fail.push(`measurement-session:w${w}-${lbl}`);
+      for (const k of ["low", "moderate", "high"]) {
+        const c = im.events.filter((e) => e.tier === k).reduce((a, e) => a + (e.contacts || 0), 0);
+        if (c !== im[k]) fail.push(`contacts-mismatch:w${w}-${lbl}-${k}`);
+      }
     }
+    const high = wed.high + fri.high;
+    if (high !== (META.highContactCapByWeek[w] ?? 0)) fail.push(`high-contacts:w${w}=${high}`);
+    if (w < 5 && high > 0) fail.push(`high-tier-too-early:w${w}`);
   }
-  // High tier is absent before week 5 — including week 1, which used to carry the
-  // broad-jump measurement under the C03 exception. That measurement was withdrawn
-  // (amendment A3), so NO impact session is a test and the cap binds everywhere.
-  for (const w of [1, 2, 3, 4, 6]) {
-    const high = IMPACT[w].wed.high + IMPACT[w].fri.high;
-    if (high > 0) fail.push(`high-tier-too-early:w${w}=${high}`);
+  // ≤15% weekly growth within an established tier, except the named week-5 entry and the
+  // week-7 restoration after the deload (C04).
+  for (let w = 2; w <= 12; w++) {
+    if (w === 5 || w === 7) continue;
+    const a = tiers(w - 1), b = tiers(w);
+    for (const k of ["low", "moderate", "high"]) if (a[k] > 0 && b[k] > a[k] * 1.15 + 1e-9) fail.push(`tier-growth:w${w}-${k}`);
   }
-  if (IMPACT[6].wed.moderate + IMPACT[6].fri.moderate > 0) fail.push("deload-w6-not-low-only");
-  for (let w = 1; w <= 12; w++) for (const d of ["wed", "fri"])
-    if (IMPACT[w][d].test) fail.push(`measurement-session-remains:w${w}-${d}`);
-  if (META.targets.broad) fail.push("broad-jump-target-still-present");
-  // ...and the training jumps DO remain, weeks 5 and 7-11.
-  for (const w of [5, 7, 8, 9, 10, 11])
-    if (!find(w, "fri", "broadpower")) fail.push(`training-jump-missing:w${w}`);
-  for (const w of [1, 12])
-    if (find(w, "fri", "broadpower")) fail.push(`maximal-jump-remains:w${w}`);
+  if (tiers(6).moderate + tiers(6).high > 0) fail.push("deload-w6-not-low-only");
+  if (tiers(12).moderate + tiers(12).high > 0) fail.push("w12-impact-not-low-only");
 
-  // Running (§13): Friday only; none in weeks 1 and 12; hill through week 8; flat only
-  // from week 9; never over 60 acceleration or 120 total metres in a session.
+  // Sprints: Friday only, every week; ≤250 m of accelerations; 2–3 min rest; hill through
+  // week 7, flat from week 8; one variable per stage; each stage twice before advancing.
+  const stages = [];
   for (let w = 1; w <= 12; w++) {
     if (IMPACT[w].wed.run) fail.push(`running-on-wednesday:w${w}`);
     const r = IMPACT[w].fri.run;
-    if (w === 1 || w === 12) { if (r) fail.push(`running-in-measurement-week:w${w}`); continue; }
     if (!r) { fail.push(`running-missing:w${w}`); continue; }
-    if (typeof r.reps !== "number") fail.push(`run-reps-not-a-number:w${w}=${typeof r.reps}`);
-    if (r.accelM > META.runCeiling.accelM) fail.push(`accel-ceiling:w${w}=${r.accelM}`);
-    if (r.totalM > META.runCeiling.totalM) fail.push(`run-ceiling:w${w}=${r.totalM}`);
-    if (r.reps > 3) fail.push(`run-reps:w${w}=${r.reps}`);
-    if (r.effort > 70) fail.push(`run-effort:w${w}=${r.effort}`);
-    if (w <= 8 && /flat/i.test(r.terrain)) fail.push(`flat-too-early:w${w}`);
-    if (w >= 9 && !/flat/i.test(r.terrain)) fail.push(`flat-expected:w${w}`);
+    if (typeof r.reps !== "number") fail.push(`run-reps-not-a-number:w${w}`);
+    if (r.accelM > META.runCeiling.accelM || r.totalM > META.runCeiling.totalM) fail.push(`run-ceiling:w${w}`);
+    if (r.restSeconds < 120 || r.restSeconds > 180) fail.push(`run-rest:w${w}=${r.restSeconds}`);
+    if (r.distance > 20) fail.push(`run-distance:w${w}`);
+    if (w <= 7 && /flat/i.test(r.terrain)) fail.push(`flat-too-early:w${w}`);
+    if (w >= 8 && !/flat/i.test(r.terrain)) fail.push(`flat-expected:w${w}`);
     if (r.runout < r.distance) fail.push(`runout-short:w${w}`);
+    stages.push([w, r.reps, r.distance, r.terrain, r.effort]);
+  }
+  {
+    let cur = null, count = 0;
+    for (const [w, ...st] of stages) {
+      if (w === 6 || w === 12) continue;
+      const key = JSON.stringify(st);
+      if (cur !== null && key !== cur) {
+        if (count < 2) fail.push(`sprint-stage-advanced-early:w${w}`);
+        const a = JSON.parse(cur);
+        const up = [a[0] < st[0], a[1] !== st[1], a[2] !== st[2], a[3] !== st[3]].filter(Boolean).length;
+        if (up > 1) fail.push(`sprint-stage-two-changes:w${w}`);
+      }
+      if (key !== cur) { cur = key; count = 1; } else count++;
+    }
   }
 
-  // Copenhagen (§14): 3×6 per side on Monday and Friday, every week, short lever.
+  // Copenhagen: 3×6 per side on Monday and Friday, every week, short lever.
   for (let w = 1; w <= 12; w++) for (const d of ["mon", "fri"]) {
     const c = find(w, d, "copen");
     if (!c) { fail.push(`copen-missing:w${w}-${d}`); continue; }
-    if (c.sets !== 3 || c.repsNum !== 6 || !c.perSide) fail.push(`copen-dose:w${w}-${d}=${c.sets}x${c.repsNum}`);
+    if (c.sets !== 3 || c.repsNum !== 6 || !c.perSide) fail.push(`copen-dose:w${w}-${d}`);
     if (!/short-lever/i.test(c.name)) fail.push(`copen-lever:w${w}-${d}`);
   }
 
-  // Time (§7, authority update): the 75-minute strength figure is a GUIDELINE in this
-  // block, not a hard cap — week-12 Friday is deliberately 94 minutes of testing. What
-  // must still hold is that the block minutes add up to the session total, and that the
-  // only session over the guideline is the test session.
-  if (META.strengthIsHardCap !== false) fail.push("strength-should-be-a-guideline");
+  // Time: a HARD 75-minute strength limit for every session, week-12 Friday included —
+  // and still inside it if every priority rest runs to three minutes.
+  if (META.strengthIsHardCap !== true || META.strengthLimitMinutes !== 75) fail.push("strength-hard-cap");
   for (let w = 1; w <= 12; w++) for (const d of DAYS) {
     const s = SESSIONS[w][d];
     const blockSum = s.blocks.reduce((a, b) => a + b.seconds, 0);
     if (blockSum !== s.seconds) fail.push(`block-sum:w${w}-${d}=${blockSum}!=${s.seconds}`);
     if (Math.abs(s.seconds / 60 - s.minutes) > 0.01) fail.push(`minutes:w${w}-${d}`);
-    const isTestSession = w === 12 && d === "fri";
-    if (isTestSession) { if (s.minutes !== 94) fail.push(`w12-fri-minutes=${s.minutes}`); }
-    else if (s.minutes > META.strengthCeilingMinutes) fail.push(`over-ceiling:w${w}-${d}=${s.minutes}`);
+    if (s.minutes > META.strengthLimitMinutes) fail.push(`over-75:w${w}-${d}=${s.minutes}`);
+    if (s.secondsIfMaxRests > 4500) fail.push(`over-75-at-3min-rests:w${w}-${d}`);
+    if (!s.blocks.some((b) => b.name === "Delay reserve" && b.seconds === 300)) fail.push(`no-delay-reserve:w${w}-${d}`);
   }
 
-  // Week 13 (§18): an optional deferred-test slot. Not one of the 48, no deadlift, and
-  // its three tests are the same targets at the same loads as week 12.
-  if (WEEK13.week !== 13 || WEEK13.day !== "fri") fail.push("w13-placement");
+  // Week 13: an optional Saturday (26 Dec) slot for deferred tests only; same loads as week 12.
+  if (WEEK13.week !== 13 || WEEK13.day !== "sat" || WEEK13.date !== "2026-12-26") fail.push("w13-placement");
   if (WEEK13.countsToward48 !== false) fail.push("w13-counts-toward-48");
   if (WEEK13.tests.length !== 3) fail.push("w13-test-count=" + WEEK13.tests.length);
   if (WEEK13.interTestSeconds !== 600) fail.push("w13-inter-test=" + WEEK13.interTestSeconds);
   for (const wt of WEEK13.tests) {
-    const cap = wt.id === "ohp" ? 125 : wt.id === "dip" ? 50 : 45;
+    const cap = wt.id === "ohp" ? 130 : wt.id === "dip" ? 50 : 45;
     if (wt.load !== cap) fail.push(`w13-load:${wt.id}=${wt.load}`);
   }
-  // Ten minutes between week-12 tests (§18 raised it from five to protect test quality).
-  const recov = SESSIONS[12].fri.blocks.filter((b) => /^Recovery after/.test(b.name));
-  if (recov.length !== 2) fail.push("w12-recovery-blocks=" + recov.length);
-  for (const b of recov) if (b.seconds !== 600) fail.push(`w12-recovery-short:${b.name}=${b.seconds}`);
 
-  // Amendment A2 — the dip six-rep ladder must climb in even 2.5 lb steps all the way
-  // into the test. Week 11 was 3x5 @ +47.5, which left the last SIX-rep exposure at
-  // +45 two weeks out and made the test a +5 step where every other step was +2.5.
-  {
-    const sixes = [];
-    for (let w = 1; w <= 11; w++) {
-      const b = find(w, "sun", "dipback");
-      if (b && b.repsNum === 6) sixes.push(b.load);
-    }
-    const last = sixes[sixes.length - 1];
-    if (last !== 47.5) fail.push(`dip-last-six=${last}, want 47.5`);
-    if (tDip.load - last !== 2.5) fail.push(`dip-final-step=${tDip.load - last}, want 2.5`);
-    for (let i = 1; i < sixes.length; i++) {
-      const step = sixes[i] - sixes[i - 1];
-      if (step !== 0 && step !== 2.5) fail.push(`dip-uneven-step:${sixes[i-1]}->${sixes[i]}`);
-    }
+  // Fresh-slot ordering: power first (except week-12 Friday), then the day's priority lift.
+  const PRIORITY = { sun: "dipheavy", mon: "pullup", wed: "ohptop", fri: "squat" };
+  for (const w of NORMAL) for (const d of DAYS) {
+    const items = SESSIONS[w][d].items;
+    if (!items[0].power) fail.push(`power-not-first:w${w}-${d}`);
+    const firstMain = items.find((i) => !i.power);
+    const want = PRIORITY[d] === "pullup" && w >= 7 ? "pulluplong" : PRIORITY[d];
+    if (firstMain.id !== want) fail.push(`fresh-slot:w${w}-${d}=${firstMain.id}`);
   }
-
-  // Amendment A1 — plantarflexor and hamstring work on BOTH lower days, every week.
-  // The block prescribes 40-60 pogo contacts a week plus accelerations; the calf had
-  // no direct work at all and the hamstring twelve reps, against thirty-six for the
-  // adductor. The test session is the one exception: nothing goes in front of it.
-  for (let w = 1; w <= 12; w++) {
-    for (const d of ["mon", "fri"]) {
-      const isTestDay = w === 12 && d === "fri";
-      const calf = find(w, d, "calf");
-      if (!calf && !isTestDay) fail.push(`calf-missing:w${w}-${d}`);
-      if (calf && isTestDay) fail.push(`calf-on-test-day`);
-      if (calf && calf.workSet) fail.push(`calf-counts-as-work-set:w${w}-${d}`);
-    }
-    // knee-flexion on Monday (the deadlift trains hip extension, not knee flexion)
-    const lc = find(w, "mon", "legcurl");
-    if (!lc) fail.push(`hamstring-missing:w${w}-mon`);
-    else if (lc.sets !== (w === 6 || w === 12 ? 1 : 2)) fail.push(`hamstring-sets:w${w}-mon=${lc.sets}`);
-    // hip-extension on Friday, at a dose that can actually protect the tissue
-    const sl = find(w, "fri", "slrdl");
-    if (!sl) fail.push(`slrdl-missing:w${w}`);
-    else if (!(w === 6 || w === 12) && sl.sets !== 2) fail.push(`slrdl-sets:w${w}=${sl.sets}`);
-  }
-
-  // Fresh-slot ordering: one heavy pressing priority per session, in the freshest slot.
-  if (SESSIONS[1].wed.items.findIndex((i) => i.id === "ohptop") < 0) fail.push("wed-no-ohp-priority");
-  if (SESSIONS[1].fri.items[0].id !== "dblclean") fail.push("fri-power-not-first");
-  if (find(1, "sun", "dipheavy") == null) fail.push("sun-fresh-dip");
 
   // Excluded exercises must not appear anywhere — prescriptions, alts or fallback text.
+  // (Dumbbell and cable rows were allowed again on 23 Sep.)
   const appSrc = readFileSync("src/App.jsx", "utf8") + readFileSync("src/program.js", "utf8");
-  for (const bad of ["Turkish", "Bulgarian", "Barbell RDL", "Dumbbell row", "Cable row", "Cable flye"]) {
+  for (const bad of ["Turkish get-up", "Bulgarian", "Barbell RDL", "Cable flye"]) {
     if (new RegExp("\\b" + bad + "\\b", "i").test(appSrc)) fail.push("excluded-exercise:" + bad);
   }
 }
@@ -666,11 +712,12 @@ else {
 //     the earlier archive must SURVIVE, and the new block must start clean.
 {
   const prev = JSON.stringify({
-    program: "astra-synthesis-v3", version: 15, week: 4, day: "fri",
+    program: "astra-synthesis-v4", version: 16, week: 4, day: "fri",
     // A phone that has now run THREE programs: two already archived, v3 live.
     archived: [
       { program: "press-priority-v1.3", logs: { 3: { fri: { squat: [{ w: "225", r: "3" }] } } }, notes: { "3-fri": "ancient squat note" } },
       { program: "astra-concurrent-v2", logs: { 2: { fri: { squat: [{ w: "215", r: "4" }] } } }, notes: { "2-fri": "v2 squat note" } },
+      { program: "astra-synthesis-v3", logs: { 1: { fri: { squat: [{ w: "195", r: "2" }] } } }, notes: { "1-fri": "syn3 squat note" } },
     ],
     logs: { 4: { fri: { squat: [{ w: "205", r: "5", rir: "2" }] }, wed: { ohp: [{ w: "115", r: "3" }] } } },
     extraSets: {}, notes: { "4-fri": "v3 squat note" }, exNotes: {}, altChoice: {},
@@ -689,7 +736,7 @@ else {
   if (!body2.includes("WEEK 1")) fail.push("migration-week-not-reset");
 
   const stored = JSON.parse(w2.localStorage.getItem("pp-tracker-v3") || "{}");
-  if (stored.program !== "astra-synthesis-v4") fail.push("migration-no-program-stamp");
+  if (stored.program !== "astra-synthesis-v5") fail.push("migration-no-program-stamp");
   if (stored.settings.theme !== "chalk" || stored.settings.tone !== "sonar") fail.push("migration-prefs-lost");
   if (stored.settings.planName === "A renamed plan") fail.push("migration-old-planname-kept");
   // The colliding old logs must NOT appear as this block's data.
@@ -699,10 +746,11 @@ else {
   // ...but they must still exist, archived — AND the older archive must have survived.
   const arch = JSON.stringify(stored.archived || []);
   if (!Array.isArray(stored.archived)) fail.push("migration-archive-not-a-list");
-  if (!arch.includes("205") || !arch.includes("v3 squat note")) fail.push("migration-v3-archive-incomplete");
+  if (!arch.includes("205") || !arch.includes("v3 squat note")) fail.push("migration-v4-archive-incomplete");
+  if (!arch.includes("195") || !arch.includes("syn3 squat note")) fail.push("migration-clobbered-syn3-archive");
   if (!arch.includes("215") || !arch.includes("v2 squat note")) fail.push("migration-clobbered-v2-archive");
   if (!arch.includes("225") || !arch.includes("ancient squat note")) fail.push("migration-clobbered-oldest-archive");
-  if ((stored.archived || []).length !== 3) fail.push("migration-archive-depth=" + (stored.archived || []).length);
+  if ((stored.archived || []).length !== 4) fail.push("migration-archive-depth=" + (stored.archived || []).length);
 
   // Re-opening must not re-archive (which would stack empty state onto the real archive).
   const again = w2.localStorage.getItem("pp-tracker-v3");

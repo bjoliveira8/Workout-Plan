@@ -1,32 +1,32 @@
 import { useState, useEffect, useRef } from "react";
 import { SESSIONS, IMPACT, AUDIT, META, WEEK13, SOURCE } from "./program.js";
 
-/* ═══════════ PROGRAM DATA — Astra Synthesized Concurrent Block v4.0-syn2 ═══════════
-   Source of truth: docs/12-week-concurrent-block-v4.md, generated into src/program.js
-   from docs/source/SYNTHESIZED_PRESCRIPTIONS_V2.json (48 sessions, 397 prescribed rows,
-   24 impact sessions, plus the week-13 deferred-test contingency).
+/* ═══════════ PROGRAM DATA — Astra Synthesized Concurrent Block v5.0-syn3 ═══════════
+   Source of truth: docs/12-week-concurrent-block-v5.md, generated into src/program.js
+   from docs/source/SYNTHESIZED_PRESCRIPTIONS_V3.json (48 sessions, 24 impact sessions,
+   plus the Saturday week-13 deferred-test contingency).
 
    src/program.js is the SINGLE edit point for every prescription. Nothing in this file
    hard-codes a load, a rep count or a contact target; everything below reads the
    generated table. test.mjs guards the block's floors, ceilings and gates so a weekly
    autoregulation edit cannot breach them.
 
-   Week composition VARIES: week 12 Wednesday carries no overhead press, the three target
-   tests replace Friday's ordinary exposures, and weeks 7–11 split Monday's pull-up work
-   into a longer target-rep set plus three triples. That is why sessions are a per-week
-   table rather than a static day list with a load wave over it.
+   Week composition VARIES: week-12 tests are split (OHP on Wednesday; dip then pull-up
+   on Friday, with no power work in front of them), and weeks 7–11 split Monday's
+   pull-up work into a longer target-rep set plus three triples.
 
-   WHAT CHANGED IN V2 (see docs/source/SYNTHESIS_CHANGELOG_V2.md):
-   - Strength time is a GUIDELINE, not a hard cap. Week-12 Friday is deliberately 94
-     minutes of testing. The impact clocks ARE hard caps and now differ by day:
-     Wednesday 15 minutes, Friday 30, both including travel.
-   - Daily power work replaces the old generic kettlebell primer — four explicit power
-     days with their own loads, rehearsals and stop rules.
-   - Direct biceps on Sunday and Wednesday only, three recurring variation pairs at
-     2×8–12. No direct triceps anywhere.
-   - Added leg accessories: Monday reverse lunge, Friday supported single-leg RDL.
-   - Week 13 is an OPTIONAL Friday slot for tests deferred before their target attempt.
-     It is not a thirteenth training week and carries no deadlift.                     */
+   WHAT CHANGED IN V3 (see docs/source/SYNTHESIS_CHANGELOG_V3.md):
+   - Strength time is a HARD 75-minute limit again, 5-minute delay reserve included.
+     Wednesday impact is a hard 15 minutes; Friday impact a ~30-minute target. Travel is
+     not budgeted.
+   - Arms train for size on four days: biceps Sunday/Wednesday, triceps Monday/Friday,
+     3×8–15 at 1–2 RIR. Calves ≥3 sets Monday and Friday. No exercise is ever done for a
+     single set (tests excepted).
+   - Friday dumbbell incline bench, supersetted with the single-leg RDL.
+   - Shorter rests (2:00–3:00 priority lifts), supersets for unrelated accessories.
+   - A restored plyometric and sprint progression; no broad-jump test.
+   - Week 13 is an OPTIONAL Saturday (26 Dec) slot for tests deferred before their
+     target attempt. It is not a thirteenth training week and carries no deadlift.     */
 
 const BLOCK_VERSION = META.blockVersion;
 /* Stamped into every saved bundle. A bundle carrying a DIFFERENT id was written by an
@@ -53,13 +53,13 @@ const DAY_BY_ID = Object.fromEntries(DAYS.map(d => [d.id, d]));
    Each item also carries its own `fallback` from the plan, which the card shows; this
    map is only for the ones offered as a one-tap swap. */
 const ALT = {
-  row: "Chest-supported independent-arm lever / T-bar, or bilateral chest-supported row",
+  row: "One-arm chest-supported machine row, or one-arm seated cable row",
   facepull: "Band external rotation, or prone Y and T",
   extrot: "Band external rotation, or prone Y and T",
   proney: "Band external rotation, or prone Y and T",
   pallof: "Cable or landmine anti-rotation variant at the same reserve",
   landmine: "Cable high-to-low chop at the same reserve",
-  scoop: "Cable lift, same sets and intent",
+  scoop: "Landmine rotational punch, same sets and intent",
   abwheel: "Short-range ab wheel or bent-knee hanging raise",
   hollow: "Tucked-lever hollow hold",
   bodysaw: "Short-range ab wheel if no safe slider surface",
@@ -67,15 +67,15 @@ const ALT = {
 };
 
 const REDUCED = new Set(META.deloadWeeks);
-const TEST_WEEK = META.testWeek, TEST_DAY = META.testDay;
-const isTestSession = (w, d) => w === TEST_WEEK && d === TEST_DAY;
+const TEST_WEEK = META.testWeek, TEST_DAYS = new Set(META.testDays);   // OHP Wednesday; dip + pull-up Friday
+const isTestSession = (w, d) => w === TEST_WEEK && TEST_DAYS.has(d);
 
-const BADGE = { 1:"Jump baseline", 5:"High tier enters", 7:"Longer pull-up set", 9:"Flat running", 12:"Tests on Friday" };
-const PHASE = (w) => (w === 1 ? "Calibration" : w === 6 ? "Deload" : w === 12 ? "Deload + Test"
+const BADGE = { 1:"OHP anchored to 20 Sep single", 5:"High tier enters", 7:"Longer pull-up set", 8:"Flat sprints", 10:"Sprints 85–90%", 12:"Tests Wed + Fri" };
+const PHASE = (w) => (w === 1 ? "Accumulation start" : w === 6 ? "Deload" : w === 12 ? "Deload + Test"
                     : w <= 5 ? "Accumulation" : "Intensification");
 
 /* Week-strip bar height = that week's compound work sets (press + vertical + horizontal).
-   Derived, never asserted: 33 in normal weeks, 19 in week 6, 15 in week 12. */
+   Derived, never asserted: 36 in normal weeks, 23 in week 6, 15 in week 12. */
 const WEEK_LOAD = (w) => { const a = AUDIT[w]; return a ? a.press + a.vertical + a.horizontal : 0; };
 
 /* Reserve floor. C08 sets the success standard at >= 2 RIR, aiming for 2; the deload and
@@ -97,24 +97,25 @@ const CUT_LABEL = { never:"never-cut", second:"cut-2nd", first:"cut-1st" };
 const WEEKDAYS = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
 
 /* ── Impact ledger (§12) ────────────────────────────────────────────────────────────
-   Three tiers, counted as landings. One bilateral landing is one contact. The high tier
-   is capped at six TRAINING contacts a week and is absent before week 5; weeks 1 and 12
-   is capped at six training contacts a week and is absent before week 5. The broad-jump
-   MEASUREMENT was withdrawn after review; the training jumps in weeks 5 and 7–11 remain.
+   Three tiers, counted as ground contacts; one bilateral landing is one contact. The
+   weekly targets follow the approved tier table: high tier absent before week 5, a named
+   entry of 12 in week 5, then 12 → 18 by week 11, never more than +15% a week within a
+   tier. There is no broad-jump test in this block.
 
-   Each impact day has its own clock, which starts BEFORE travel, and its own hard cap:
-   Wednesday 15 minutes, Friday 30. The cap is on the clock, not on the contacts.      */
-const TIER_NAME = { low:"Low · bilateral pogos", moderate:"Moderate · hurdle hops / rehearsals", high:"High · maximal broad jumps" };
+   Each impact day has its own clock: Wednesday a HARD 15 minutes, Friday a ~30-minute
+   TARGET. Travel is not budgeted (Brian, 23 Sep).                                       */
+const TIER_NAME = { low:"Low · pogos / line hops", moderate:"Moderate · hurdle hops / submax broad jumps", high:"High · depth jumps / maximal broad jumps" };
+const HIGH_CAP = (w) => META.highContactCapByWeek[w] ?? 0;
 const TIER_KEYS = ["low", "moderate", "high"];
 const impactFor = (w, dId) => (dId === "wed" || dId === "fri") ? (IMPACT[w]?.[dId] || null) : null;
 const hasImpact = (w, dId) => { const x = impactFor(w, dId); return !!x && TIER_KEYS.some(t => x[t] > 0); };
-/* Running is Friday only, after the jumps and before lifting. There is no second running
-   day, and weeks 1 and 12 have none at all — those Fridays are measurement days. */
+/* Running is Friday only, after the jumps and before lifting, every week (week 12 is two
+   easy 20 m runs). One variable changes per stage, each stage twice before advancing. */
 const runFor = (w, dId) => (dId === "fri" ? (impactFor(w, "fri")?.run || null) : null);
-const RUN_CEILING = META.runCeiling;          // 60 acceleration m / 120 total m per session
+const RUN_CEILING = META.runCeiling;          // 250 m of quality running per session (section 13)
 
 /* ── Week 13 (§18) ──────────────────────────────────────────────────────────────────
-   An OPTIONAL Friday slot carrying only measurements deferred before their week-12
+   An OPTIONAL Saturday (26 Dec) slot carrying only measurements deferred before their week-12
    target attempt. Not a thirteenth training week, not one of the 48 sessions, no
    deadlift, and never a retry of a completed or failed target set. A week-13 result is
    labelled week 13 and never becomes a week-12 achievement.                           */
@@ -199,7 +200,7 @@ function getRx(ex, week, dayId) {
    why the flag is read rather than inferred from the family. One completed left/right
    row pair is one horizontal set, not two.                                            */
 function weekVolume(week) {
-  const sets = { press:0, vertical:0, horizontal:0, biceps:0 };
+  const sets = { press:0, vertical:0, horizontal:0, biceps:0, triceps:0, calves:0 };
   const days = { lower:new Set(), shoulder:new Set(), abs:new Set(), adductor:new Set(),
                  carry:new Set(), unilateral:new Set(), power:new Set(), rotation:new Set() };
   DAYS.forEach(d => {
@@ -209,8 +210,12 @@ function weekVolume(week) {
       /* Read the plan's OWN flags; do not infer an exposure from the family. Direct
          abdominal work spans three families (abs, anti-rotation, dynamic rotation) — the
          floor is four exposure days, and counting family "abs" would report two. */
-      if (it.workSet && sets[it.family] != null) sets[it.family] += it.sets;
-      if (it.directArm) sets.biceps += it.sets;
+      // Only the three compound families feed the floors; arm and calf sets are counted
+      // separately below (their family names would otherwise double-count them).
+      if (it.workSet && (it.family === "press" || it.family === "vertical" || it.family === "horizontal")) sets[it.family] += it.sets;
+      if (it.armKind === "biceps") sets.biceps += it.sets;
+      if (it.armKind === "triceps") sets.triceps += it.sets;
+      if (it.calf) sets.calves += it.sets;
       if (it.lowerStrength) days.lower.add(d.id);
       if (it.shoulderHealth) days.shoulder.add(d.id);
       if (it.directAbs) days.abs.add(d.id);
@@ -224,6 +229,7 @@ function weekVolume(week) {
   const pull = sets.vertical + sets.horizontal;
   return {
     press: sets.press, vpull: sets.vertical, hpull: sets.horizontal, pull, biceps: sets.biceps,
+    triceps: sets.triceps, calves: sets.calves,
     lower: days.lower.size, shoulder: days.shoulder.size, abs: days.abs.size,
     adductor: days.adductor.size, carry: days.carry.size, rotation: days.rotation.size,
     unilateral: days.unilateral.size, powerDays: days.power.size,
@@ -566,7 +572,7 @@ export default function ConcurrentBlockTracker() {
       document.body.removeChild(ta);
     }
   };
-  const exportBackup = () => copyText(JSON.stringify({ app:"concurrent-block", program:PROGRAM_ID, version:15, exported:new Date().toISOString(), archived, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck }), "Backup JSON copied — keep it somewhere safe");
+  const exportBackup = () => copyText(JSON.stringify({ app:"concurrent-block", program:PROGRAM_ID, version:16, exported:new Date().toISOString(), archived, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck }), "Backup JSON copied — keep it somewhere safe");
   const restoreBackup = () => {
     try {
       const d = JSON.parse(restorePaste);
@@ -596,24 +602,24 @@ export default function ConcurrentBlockTracker() {
   const buildReview = (w) => {
     const L = [], vol = weekVolume(w);
     L.push(`WEEK ${w} TRAINING LOG — ${META.planName} ${BLOCK_VERSION} (${PHASE(w)}${BADGE[w] ? " · " + BADGE[w] : ""})`);
-    L.push(`Rules of record: conflict hierarchy = tissue tolerance > OHP/dip/pull-up > prescribed TrainerRoad > elastic and acceleration quality > heavy conventional specificity > squat/bench > secondary volume. Success reserve is >= 2 RIR, aiming for 2 — easier qualifies. Targets: OHP ${META.targets.ohp}, dip ${META.targets.dip}, pull-up ${META.targets.pullup}.`);
+    L.push(`Rules of record: conflict hierarchy = tissue tolerance > OHP/dip/pull-up > prescribed TrainerRoad > squat > jumping/sprinting > bench > deadlift > secondary volume. Targets: OHP ${META.targets.ohp} at ${META.targetStandard.ohp}; dip ${META.targets.dip} and pull-up ${META.targets.pullup} at ${META.targetStandard.dip}. Squat and deadlift are maintained; plyometric capacity progresses without a test. No exercise is ever done for a single set (tests excepted).`);
     L.push("");
     DAYS.forEach(d => {
       const ses = sessionFor(w, d.id);
       if (!ses) return;
       L.push(`${WEEKDAYS[dayMap[d.id]]} — ${d.lift} · ${d.title}${isTestSession(w, d.id) ? " · TEST SESSION" : ""}${sessDone[`${w}-${d.id}`] ? " · session finished" : ""}`);
-      L.push(`  Objective: ${ses.objective}  [planned ${ses.minutes} min; ${META.strengthGuidelineMinutes}-min guideline, not a hard stop${ses.minutes > META.strengthGuidelineMinutes ? " — over it BY DESIGN" : ""}]`);
+      L.push(`  Objective: ${ses.objective}  [planned ${ses.minutes} min of the ${META.strengthLimitMinutes}-min hard limit, 5-min delay reserve included${ses.minutes > META.strengthLimitMinutes ? " — OVER THE LIMIT" : ""}]`);
       exercisesFor(w, d.id).forEach(ex => {
         if (ex.kind === "impact") {
           const sum = impactSummary(w, d.id);
           const ip = impactFor(w, d.id);
           L.push(`  Impact contacts (actual/target): ${sum || "none prescribed"}${elasticQ[`${w}-${d.id}`] ? ` · quality ${elasticQ[`${w}-${d.id}`]}` : " · quality not logged"}`);
-          L.push(`    Clock: ${ip.capMinutes} min hard cap including travel · ${Math.round(ip.baseSeconds/60*10)/10} min of prescribed work · ${Math.round(ip.travelSeconds/60*10)/10} min left for transit${ip.travelSeconds <= 120 ? " — TIGHT, compare actual transit before starting" : ""}${ip.test ? " · MEASUREMENT session" : ""}`);
+          L.push(`    Clock: ${ip.capMinutes}-min ${ip.capType === "hard" ? "hard limit" : "target"} · ${Math.round(ip.baseSeconds/60*10)/10} min of prescribed work (travel not budgeted)`);
           return;
         }
         if (ex.kind === "run") {
           const r = runFor(w, d.id), lg = sprintLog[w] || {};
-          L.push(`  Running — Rx ${r.reps} × ${r.distance} m on ${r.terrain} at ${r.effort}% perceived effort, ${r.runout} m runout each, 120 s recovery (${r.totalM} m total, ceiling ${RUN_CEILING.totalM} m): completed ${lg.reps || "not logged"}${lg.quality ? ` · ${lg.quality}` : ""}${lg.note ? ` · "${lg.note}"` : ""}`);
+          L.push(`  Running — Rx ${r.reps} × ${r.distance} m on ${r.terrain}, ${r.effort}, ${r.runout} m easy runout each, ${r.restSeconds} s recovery (${r.accelM} m of accelerations, ceiling ${RUN_CEILING.accelM} m): completed ${lg.reps || "not logged"}${lg.quality ? ` · ${lg.quality}` : ""}${lg.note ? ` · "${lg.note}"` : ""}`);
           return;
         }
         if (ex.kind === "check") {
@@ -645,8 +651,8 @@ export default function ConcurrentBlockTracker() {
     });
     const s2 = weekBelowFloor(w);
     const waived = REDUCED.has(w);
-    L.push(`VOLUME AUDIT (prescribed work sets): pressing ${vol.press} (floor ${FLOORS.press})${waived ? " — waived, reduced week" : ""} · vertical pull ${vol.vpull} (${FLOORS.vertical})${waived ? " — waived" : ""} · horizontal pull ${vol.hpull} (${FLOORS.horizontal})${waived ? " — waived" : ""} · direct biceps ${vol.biceps} sets (${FLOORS.biceps})${waived ? " — waived" : ""} · lower-body days ${vol.lower} (exactly 2) · shoulder days ${vol.shoulder} (${FLOORS.shoulder}) · direct-abs days ${vol.abs} (${FLOORS.abs}) · power days ${vol.powerDays} (${FLOORS.power}) · unilateral days ${vol.unilateral} (${FLOORS.unilateral}) · adductor days ${vol.adductor} (2) · carry days ${vol.carry} (${FLOORS.carry}, flexible) · press:pull ${vol.ratio} (max ${FLOORS.ratioMax}). Ramps, power, shoulder and core work are real training but do not count toward the pressing and pulling floors.`);
-    if (w === TEST_WEEK) L.push(`TEST RESULTS: OHP ${tested.ohp || "—"} · dip ${tested.dip || "—"} · pull-up ${tested.pullup || "—"}. No broad-jump measurement in this block.`);
+    L.push(`VOLUME AUDIT (prescribed work sets): pressing ${vol.press} (band ${FLOORS.press}–${FLOORS.pressMax})${waived ? " — waived, reduced week" : ""} · vertical pull ${vol.vpull} (${FLOORS.vertical})${waived ? " — waived" : ""} · horizontal pull ${vol.hpull} (${FLOORS.horizontal})${waived ? " — waived" : ""} · direct biceps ${vol.biceps} sets (${FLOORS.biceps})${waived ? " — waived" : ""} · direct triceps ${vol.triceps} sets (${FLOORS.triceps})${waived ? " — waived" : ""} · calf sets ${vol.calves} (${FLOORS.calves})${waived ? " — waived" : ""} · lower-body days ${vol.lower} (exactly 2) · shoulder days ${vol.shoulder} (${FLOORS.shoulder}) · direct-abs days ${vol.abs} (${FLOORS.abs}) · power days ${vol.powerDays} (${FLOORS.power}${w === TEST_WEEK ? "; 3 in week 12, none before the Friday tests (E11)" : ""}) · unilateral days ${vol.unilateral} (${FLOORS.unilateral}) · adductor days ${vol.adductor} (2) · carry days ${vol.carry} (${FLOORS.carry}, flexible) · press:pull ${vol.ratio} (max ${FLOORS.ratioMax}). Ramps, power, shoulder and core work are real training but do not count toward the pressing and pulling floors.`);
+    if (w === TEST_WEEK) L.push(`TEST RESULTS: OHP (Wednesday) ${tested.ohp || "—"} · dip (Friday) ${tested.dip || "—"} · pull-up (Friday) ${tested.pullup || "—"}. No broad-jump test in this block.`);
     L.push(`AUTO-FLAGS: ${s2} set${s2===1?"":"s"} below the week's reserve floor of ${RIR_FLOOR(w)}${s2>=2 ? " — hold the next scheduled increment" : ""}. Adductor check: ${weekAdductorFlag(w) ? "ABNORMAL — running and high-tier progressions are held" : "normal"}.`);
     L.push("");
     L.push("Coach: review this week against docs/autoregulation-criteria.md. Tell me: (1) the response level (none / 1 / 2 / 3) with the evidence for it; (2) each prescription to change next week, with the reversal condition; (3) anything that must be held rather than advanced. Never advance impact or running to compensate for a missed ride.");
@@ -666,14 +672,14 @@ export default function ConcurrentBlockTracker() {
         objective: ses.objective,
         finished: !!sessDone[`${w}-${d.id}`],
         isTestSession: isTestSession(w, d.id),
-        minuteBudget: { planned: ses.minutes, guideline: META.strengthGuidelineMinutes,
-                        isHardCap: false, overGuidelineByDesign: ses.minutes > META.strengthGuidelineMinutes,
+        minuteBudget: { planned: ses.minutes, limit: META.strengthLimitMinutes,
+                        isHardCap: true, overLimit: ses.minutes > META.strengthLimitMinutes,
+                        plannedIfEveryPriorityRestIs3Min: Math.round((ses.secondsIfMaxRests / 60) * 10) / 10,
                         blocks: ses.blocks.map(b => ({ name: b.name, minutes: b.minutes })) },
         impact: px && TIER_KEYS.some(t => px[t] > 0) ? {
           quality: elasticQ[`${w}-${d.id}`] || null,
-          capMinutes: px.capMinutes,
+          capMinutes: px.capMinutes, capType: px.capType,
           plannedWorkMinutes: Math.round((px.baseSeconds / 60) * 10) / 10,
-          travelAllowanceMinutes: Math.round((px.travelSeconds / 60) * 10) / 10,
           isMeasurement: px.test,
           tiers: TIER_KEYS.filter(t => px[t] > 0).map(t => ({ tier:t, target:px[t], actual:num(elastic[`${w}-${d.id}-${t}`]) })),
         } : null,
@@ -725,7 +731,7 @@ export default function ConcurrentBlockTracker() {
     const wed = impactFor(w, "wed"), fri = impactFor(w, "fri");
     const highTotal = (wed?.high || 0) + (fri?.high || 0);
     return JSON.stringify({
-      app: "concurrent-block", kind: "week-report", version: 16, blockVersion: BLOCK_VERSION,
+      app: "concurrent-block", kind: "week-report", version: 17, blockVersion: BLOCK_VERSION,
       programId: PROGRAM_ID, source: SOURCE,
       week: w, phase: PHASE(w), badge: BADGE[w] || null, targetRir: TARGET_RIR(w), rirFloor: RIR_FLOOR(w),
       flags: { deload: REDUCED.has(w), testWeek: w === TEST_WEEK,
@@ -735,10 +741,9 @@ export default function ConcurrentBlockTracker() {
         low: (wed?.low || 0) + (fri?.low || 0),
         moderate: (wed?.moderate || 0) + (fri?.moderate || 0),
         high: highTotal,
-        highCap: META.highContactCap,
-        /* Weeks 1 and 12 carry three MEASUREMENT jumps under the approved C03 exception;
-           no measurement weeks remain, so the cap applies everywhere. */
-        capOk: highTotal <= META.highContactCap,
+        highCap: HIGH_CAP(w),
+        /* The approved tier table sets a weekly high-tier ceiling (0 before week 5). */
+        capOk: highTotal <= HIGH_CAP(w),
         capMinutes: META.impactCapMinutes,
       },
       volumeAudit: { ...vol, floors: FLOORS, waived: REDUCED.has(w) },
@@ -931,32 +936,25 @@ export default function ConcurrentBlockTracker() {
     const exDone = isDoneEff(ex, { sets:1 });
     const q = elasticQ[sessKey] || "";
     const total = tiers.reduce((a, t) => a + px[t], 0);
-    /* The broad-jump measurement was withdrawn after review. No impact session is a
-       test any more, so the six-contact cap applies everywhere without exception. */
-    const capOk = px.high <= META.highContactCap;
+    /* The weekly high-tier ceiling comes from the approved tier table; both impact days
+       count toward it. Travel is not budgeted in this block. */
+    const weekHigh = (impactFor(week, "wed")?.high || 0) + (impactFor(week, "fri")?.high || 0);
+    const capOk = weekHigh <= HIGH_CAP(week);
     const capMin = px.capMinutes;
+    const hardCap = px.capType === "hard";
     const planned = Math.round((px.baseSeconds / 60) * 10) / 10;
-    const travel = Math.round((px.travelSeconds / 60) * 10) / 10;
-    const tight = px.travelSeconds <= 120;
     return (
       <section className={`card elasticcard ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
         {cardHead(ex, ex.name, exDone, null)}
         <div className="meta-row"><div className="rx">
           <span>{total} contacts</span>
           <span className="rx-load"> · {planned} min of work</span>
-          <span className="rx-pct"> · {capMin}-min clock INCLUDING travel</span>
+          <span className="rx-pct"> · {capMin}-min {hardCap ? "hard limit" : "target"}</span>
         </div></div>
         <div className="sprintmeta">
           <span>high tier <b>{px.high}</b></span>
-          <span className={capOk ? "ok" : "warn-txt"}>weekly cap {META.highContactCap}</span>
-          <span className={tight ? "warn-txt" : ""}>{travel} min left for travel</span>
+          <span className={capOk ? "ok" : "warn-txt"}>week high tier {weekHigh} / cap {HIGH_CAP(week)}</span>
         </div>
-        {tight && (
-          <div className="banner soft"><b>This is the tight one.</b> Only {travel} min remains inside the {capMin}-minute
-            clock for travel and any extra preparation. Compare your actual transit and setup with the full prescription
-            <b> before</b> starting work, and use the cut order below if it will not fit. Log the smaller actual dose —
-            a reduced dose never qualifies a larger one for progression.</div>
-        )}
         {/* The prescribed sequence, in order, with its own time budget. Reading this
             before travelling is what makes the cut decision possible. */}
         <div className="voltable blockplan">
@@ -1007,7 +1005,7 @@ export default function ConcurrentBlockTracker() {
         ))}
         <p className="cue"><b>Cut order:</b> {px.selectionRule}</p>
         <p className="cue"><b>Progression gate:</b> {px.gate}</p>
-        <input className="exnote" placeholder="Note — landing quality, actual travel time, next-morning response" value={exNotes[k3(ex.id)] || ""}
+        <input className="exnote" placeholder="Note — landing quality, actual time, next-morning response" value={exNotes[k3(ex.id)] || ""}
           onChange={e => setExNotes(p => ({ ...p, [k3(ex.id)]: e.target.value }))} />
       </section>
     );
@@ -1029,15 +1027,15 @@ export default function ConcurrentBlockTracker() {
           <div className="rx">
             <span>{r.reps} × {r.distance} m</span>
             <span className="rx-load"> · {r.terrain}</span>
-            <span className="rx-pct"> · {r.effort}% perceived effort</span>
+            <span className="rx-pct"> · {r.effort}</span>
           </div>
         </div>
         <div className="sprintmeta">
           <span><b>{r.accelM} m</b> acceleration + {r.runoutM} m runout = {r.totalM} m</span>
           <span className={ceilingOk ? "ok" : "warn-txt"}>ceiling {RUN_CEILING.accelM} / {RUN_CEILING.totalM} m</span>
-          <span>120 s between reps</span>
+          <span>{r.restSeconds} s between reps</span>
         </div>
-        <div className="banner soft">Every rep gets a further <b>{r.runout} m</b> of clear, easy deceleration — uphill too. No abrupt stopping. The walk back happens inside the 120 s.</div>
+        <div className="banner soft">Every rep gets a further <b>{r.runout} m</b> of clear, easy deceleration — uphill too. No abrupt stopping. The walk back happens inside the {r.restSeconds} s.</div>
         <div className="tierlog">
           <label htmlFor="sprint-reps">Reps completed</label>
           <input id="sprint-reps" inputMode="numeric" placeholder={r.reps} value={lg.reps ?? ""} aria-label="Running reps completed"
@@ -1054,7 +1052,7 @@ export default function ConcurrentBlockTracker() {
           </div>
         </div>
         <div className="set-btns">
-          <button className="ghost timer-btn" onClick={() => startRestById(ex.id, 120)}>⏱ Recover 2:00</button>
+          <button className="ghost timer-btn" onClick={() => startRestById(ex.id, r.restSeconds)}>⏱ Recover {Math.floor(r.restSeconds / 60)}:{String(r.restSeconds % 60).padStart(2, "0")}</button>
         </div>
         <p className="cue"><b>Before running:</b> gentle adductor squeeze 3 × 20 s with 20 s between, at about 20–30% effort — activation, not strength work and not clearance.
           {" "}<b>Advancing:</b> two completed, tolerated runs at this exact terrain, distance, reps and effort, with a normal next day. A reduced session does not qualify a larger one. If a stage is held or skipped, later stages move back or disappear — never catch up.</p>
@@ -1222,8 +1220,9 @@ export default function ConcurrentBlockTracker() {
           Optional · deferred measurements only · {WEEK13.interTestSeconds / 60} min between tests
           {" · "}{WEEK13.delayReserveSeconds / 60} min delay reserve
         </div>
-        <div className="focus"><b>What this is</b>Only the tests you deferred in week 12 before attempting them,
-          in their original order, after an easy Wednesday and Thursday and a normal readiness check.</div>
+        <div className="focus"><b>What this is</b>Saturday, 26 December 2026 — only the tests you deferred in week 12
+          before attempting them, in their original order (OHP → dip → pull-up), after an easy Thursday recovery ride,
+          no training on Friday, and a normal readiness check. This one Saturday overrides the usual rest day.</div>
         <div className="banner alertbanner">
           <b>Not a retry.</b> Skip any target set you already completed, and any you attempted and missed or ground
           out. Using this slot to chase a better number makes the block's result unverifiable. A week-13 result is
@@ -1432,12 +1431,12 @@ export default function ConcurrentBlockTracker() {
           <div>
             <div className="cap-note">
               Planned <b>{budgetTotal} min</b>
-              {budgetTotal > META.strengthGuidelineMinutes
-                ? <> · over the {META.strengthGuidelineMinutes}-min guideline <b>by design</b></>
-                : <> · {META.strengthGuidelineMinutes}-min guideline, not a hard stop</>}
+              {budgetTotal > META.strengthLimitMinutes
+                ? <> · <b>over the {META.strengthLimitMinutes}-min hard limit</b></>
+                : <> · {META.strengthLimitMinutes}-min hard limit, 5-min delay reserve included</>}
               {" · "}target reserve {TARGET_RIR(week)}
               {hasImpact(week, day)
-                ? ` · impact runs first on a separate ${META.impactCapMinutes[day]}-min clock, travel included`
+                ? ` · impact runs first on its own ${META.impactCapMinutes[day]}-min ${META.impactCapType[day] === "hard" ? "hard limit" : "target"}`
                 : ""}
             </div>
             {sessionTime[sessKey] && (
@@ -1445,6 +1444,14 @@ export default function ConcurrentBlockTracker() {
             )}
             <div className="focus"><b>Objective</b>{session.objective}</div>
             <div className="ridenote"><b>Cycling</b>{dayData.ride}</div>
+            {(session.notes || []).map((n, i) => (
+              <div className="focus" key={"note" + i}><b>{n.title}</b>{n.text}</div>
+            ))}
+            <details className="volaudit sessionrules">
+              <summary>Sequencing checks and cut order</summary>
+              <div className="ridenote"><b>Sequencing</b>{session.sequencing}</div>
+              <div className="ridenote"><b>If short on time or recovery</b>{session.cuts}</div>
+            </details>
             {addFlag && (
               <div className="banner alertbanner"><b>Adductor gate is open:</b> an abnormal check was logged this week. Running and high-tier jump progressions are held until it returns to normal. Movement-altering discomfort on its own means suspend the affected impact and get it looked at — do not wait for a second warning sign.</div>
             )}
@@ -1460,14 +1467,16 @@ export default function ConcurrentBlockTracker() {
                     one, not a primary floor. The STRUCTURAL floors are never waived: exactly two
                     lower days, three shoulder days, four ab days, four power and unilateral
                     days, and two adductor days all still hold in every week including deloads. */}
-                {[["Compound pressing", vol.press, String(FLOORS.press), vol.press >= FLOORS.press, true],
+                {[["Compound pressing", vol.press, `${FLOORS.press}–${FLOORS.pressMax}`, vol.press >= FLOORS.press && vol.press <= FLOORS.pressMax, true],
                   ["Vertical pulling", vol.vpull, String(FLOORS.vertical), vol.vpull >= FLOORS.vertical, true],
                   ["Horizontal pulling", vol.hpull, String(FLOORS.horizontal), vol.hpull >= FLOORS.horizontal, true],
                   ["Direct-biceps sets", vol.biceps, String(FLOORS.biceps), vol.biceps >= FLOORS.biceps, true],
+                  ["Direct-triceps sets", vol.triceps, String(FLOORS.triceps), vol.triceps >= FLOORS.triceps, true],
+                  ["Calf sets", vol.calves, String(FLOORS.calves), vol.calves >= FLOORS.calves, true],
                   ["Lower-body days", vol.lower, "exactly 2", vol.lower === FLOORS.lower, false],
                   ["Shoulder-health days", vol.shoulder, String(FLOORS.shoulder), vol.shoulder >= FLOORS.shoulder, false],
                   ["Direct-abs days", vol.abs, String(FLOORS.abs), vol.abs >= FLOORS.abs, false],
-                  ["Power days", vol.powerDays, String(FLOORS.power), vol.powerDays >= FLOORS.power, false],
+                  ["Power days", vol.powerDays, String(FLOORS.power), vol.powerDays >= FLOORS.power, true],
                   ["Unilateral days", vol.unilateral, String(FLOORS.unilateral), vol.unilateral >= FLOORS.unilateral, false],
                   ["Adductor days", vol.adductor, "2", vol.adductor >= 2, false],
                   ["Carry days", vol.carry, String(FLOORS.carry) + " (flexible)", vol.carry >= FLOORS.carry, true],
