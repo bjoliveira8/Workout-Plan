@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { SESSIONS, IMPACT, AUDIT, META, WEEK13, SOURCE } from "./program.js";
+import { SYNC_KEY, BUNDLE_PATH, EMPTY_SYNC, PRIORITY_DELAY_MS, HIDDEN_THROTTLE_MS, normalizeConfig, reportPath,
+         calendarWeek, countLoggedSets, runSync, createQueue, ghGet, syncStatus, needsAttention, expiryText } from "./sync.js";
 
 /* ═══════════ PROGRAM DATA — Astra Synthesized Concurrent Block v5.0-syn3 ═══════════
    Source of truth: docs/12-week-concurrent-block-v5.md, generated into src/program.js
@@ -35,6 +37,9 @@ const BLOCK_VERSION = META.blockVersion;
    otherwise surface as this block's prescription and as its "LAST WK" reference. */
 const PROGRAM_ID = META.programId;
 const BW = META.bw;                       // bodyweight anchor for system-load readouts
+/* Cloud sync runs one pass at a time, app-wide (spec §4.3). Module-level so every trigger —
+   timers, listeners, buttons — lines up behind the same queue. */
+const syncQueue = createQueue();
 
 /* The four day shells. Everything else about a session comes from SESSIONS[week][day]. */
 const DAYS = [
@@ -367,6 +372,15 @@ export default function ConcurrentBlockTracker() {
   const wakeRef = useRef(null);
   const loaded = useRef(false);
   const saveTimer = useRef(null);
+  /* cloud sync (spec §4) — its own storage key, never inside pp-tracker-v3 */
+  const [sync, setSync] = useState(EMPTY_SYNC);
+  const [keyDraft, setKeyDraft] = useState({ token: "", expires: "2027-01-31" }); // the key field before Save
+  const [cloudRestore, setCloudRestore] = useState(null); // null | {busy} | {error} | {data, sha, cloudSets, cloudDate}
+  const syncRef = useRef(EMPTY_SYNC);      // latest config, for timers and listeners that outlive a render
+  const syncLoaded = useRef(false);
+  const latest = useRef(null);             // latest file builder, refreshed after every render
+  const priorityDirty = useRef(false);     // a tissue check or note changed since the last good sync
+  const priorityTimer = useRef(null);
 
   const T = THEMES[settings.theme] || THEMES.iron;
   const themeStyle = Object.fromEntries(Object.entries(T.v).map(([k,v]) => ["--" + k, v]));
@@ -455,6 +469,22 @@ export default function ConcurrentBlockTracker() {
       catch (e) { setStatus("error"); }
     }, 700);
   }, [week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck, archived]);
+  /* load the sync config once — a separate key, so a missing or broken one never touches training data */
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get(SYNC_KEY);
+        const c = normalizeConfig(JSON.parse(r.value));
+        syncLoaded.current = true;
+        syncRef.current = c; setSync(c);
+      } catch (e) { syncLoaded.current = true; /* no key saved yet: sync stays off */ }
+    })();
+  }, []);
+  /* persist it whenever it changes */
+  useEffect(() => {
+    if (!syncLoaded.current) return;
+    window.storage.set(SYNC_KEY, JSON.stringify(sync)).catch(() => {});
+  }, [sync]);
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2500); };
 
@@ -572,24 +602,27 @@ export default function ConcurrentBlockTracker() {
       document.body.removeChild(ta);
     }
   };
-  const exportBackup = () => copyText(JSON.stringify({ app:"concurrent-block", program:PROGRAM_ID, version:16, exported:new Date().toISOString(), archived, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck }), "Backup JSON copied — keep it somewhere safe");
+  // The full backup object — Copy backup and cloud sync both send exactly this (version 16).
+  const backupObject = () => ({ app:"concurrent-block", program:PROGRAM_ID, version:16, exported:new Date().toISOString(), archived, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck });
+  const exportBackup = () => copyText(JSON.stringify(backupObject()), "Backup JSON copied — keep it somewhere safe");
+  // Replace the phone's training data with backup `d` — shared by paste-restore and Restore from cloud.
+  const applyBackup = (d) => {
+    if (!d || !d.logs) throw new Error("bad");
+    setLogs(d.logs||{}); setExtraSets(d.extraSets||{}); setNotes(d.notes||{});
+    setExNotes(d.exNotes||{});
+    const ac = {};
+    Object.entries(d.altChoice || {}).forEach(([k, v]) => { if (v) ac[k] = true; });
+    setAltChoice(ac);
+    setDone(d.done||{}); setSessDone(d.sessDone||{});
+    setTested({ ohp:"", dip:"", pullup:"", ...(d.tested||{}) });
+    setOrder(d.order||{}); setBarSpeed(d.barSpeed||{}); setSessionTime(d.sessionTime||{});
+    setElastic(d.elastic||{}); setElasticQ(d.elasticQ||{}); setSprintLog(d.sprintLog||{});
+    setPowerQual(d.powerQual||{}); setAddCheck(d.addCheck||{}); setArchived(asArchiveList(d.archived));
+    if (d.settings) { const st = { ...DEFAULT_SETTINGS, ...d.settings }; if (!TONES[st.tone]) st.tone = "radar"; setSettings(st); }
+  };
   const restoreBackup = () => {
-    try {
-      const d = JSON.parse(restorePaste);
-      if (!d.logs) throw new Error("bad");
-      setLogs(d.logs||{}); setExtraSets(d.extraSets||{}); setNotes(d.notes||{});
-      setExNotes(d.exNotes||{});
-      const ac = {};
-      Object.entries(d.altChoice || {}).forEach(([k, v]) => { if (v) ac[k] = true; });
-      setAltChoice(ac);
-      setDone(d.done||{}); setSessDone(d.sessDone||{});
-      setTested({ ohp:"", dip:"", pullup:"", ...(d.tested||{}) });
-      setOrder(d.order||{}); setBarSpeed(d.barSpeed||{}); setSessionTime(d.sessionTime||{});
-      setElastic(d.elastic||{}); setElasticQ(d.elasticQ||{}); setSprintLog(d.sprintLog||{});
-      setPowerQual(d.powerQual||{}); setAddCheck(d.addCheck||{}); setArchived(asArchiveList(d.archived));
-      if (d.settings) { const st = { ...DEFAULT_SETTINGS, ...d.settings }; if (!TONES[st.tone]) st.tone = "radar"; setSettings(st); }
-      setRestorePaste(""); flash("Backup restored");
-    } catch (e) { flash("That doesn't look like a valid backup"); }
+    try { applyBackup(JSON.parse(restorePaste)); setRestorePaste(""); flash("Backup restored"); }
+    catch (e) { flash("That doesn't look like a valid backup"); }
   };
   const impactSummary = (w, dId) => {
     const px = impactFor(w, dId);
@@ -752,6 +785,135 @@ export default function ConcurrentBlockTracker() {
       autoFlags: { belowRirFloor: weekBelowFloor(w), adductorAbnormal: weekAdductorFlag(w) },
     }, null, 2);
   };
+
+  /* ── cloud sync (spec §4) ── */
+  // What one sync uploads: the full backup, plus the week report for the calendar week and —
+  // if different — the week on screen. Week 13 has no report.
+  const syncFiles = () => {
+    const cw = calendarWeek(new Date(), META.startDate, META.weeks);
+    const weeks = [...new Set([cw, week])].filter(w => w >= 1 && w <= META.weeks);
+    return [
+      { path: BUNDLE_PATH, text: JSON.stringify(backupObject()), localSets: countLoggedSets({ logs }) },
+      ...weeks.map(w => ({ path: reportPath(w), text: buildReviewJSON(w) })),
+    ];
+  };
+  // Timers and listeners outlive the render that created them; give them the newest builder.
+  useEffect(() => { latest.current = { syncFiles }; syncRef.current = sync; });
+
+  // Run one sync through the shared queue. Only status fields come back, so a key saved while
+  // a sync was in flight is kept. Cheap to call often: unchanged files cost no request.
+  const doSync = (opts = {}) => {
+    if (!syncLoaded.current || !loaded.current || !syncRef.current.token || !latest.current) return Promise.resolve(null);
+    return syncQueue(async () => {
+      const r = await runSync(syncRef.current, latest.current.syncFiles(), {
+        fetchImpl: typeof window.fetch === "function" ? window.fetch.bind(window) : null,
+        now: Date.now(), online: navigator.onLine !== false, force: !!opts.force,
+      });
+      if (r.outcome === "ok") priorityDirty.current = false;
+      const next = { ...syncRef.current, ...r.patch };
+      syncRef.current = next; setSync(next);
+      return r;
+    });
+  };
+
+  // Trigger: a tissue check or note changed — upload 3 s later, while the app is still open.
+  // This is what carries the Saturday-morning adductor check to the review.
+  const touchPriority = () => {
+    priorityDirty.current = true;
+    clearTimeout(priorityTimer.current);
+    priorityTimer.current = setTimeout(() => doSync(), PRIORITY_DELAY_MS);
+  };
+
+  // Save the pasted key and start clean: no cached files, so the first sync looks before it
+  // writes (the second-device guard). The [ready, sync.token] effect starts that first sync.
+  const saveKey = () => {
+    const next = normalizeConfig({ ...syncRef.current, token: keyDraft.token, tokenExpires: keyDraft.expires,
+                                   lastError: null, paused: false, files: {} });
+    syncRef.current = next; setSync(next);
+    setKeyDraft(k => ({ ...k, token: "" }));
+  };
+  // Turn sync off: forget the key and every cached sha. Training data is untouched.
+  const turnOffSync = () => { const next = { ...EMPTY_SYNC }; syncRef.current = next; setSync(next); setCloudRestore(null); };
+  // Brian chose to overwrite the cloud with this phone's data (only offered while paused).
+  const forceUpload = () => { doSync({ force: true }); };
+
+  // Restore from cloud, step 1: fetch the cloud copy and show it beside the phone's — nothing
+  // is replaced yet.
+  const startCloudRestore = async () => {
+    setCloudRestore({ busy: true });
+    const g = await ghGet(syncRef.current, BUNDLE_PATH, typeof window.fetch === "function" ? window.fetch.bind(window) : null);
+    if (g.status !== 200) {
+      setCloudRestore({ error: g.status === 404 ? "There is no cloud copy yet."
+                             : g.status === 401 ? "GitHub refused the key — paste a new one."
+                             : "Couldn't reach GitHub — try again with a signal." });
+      return;
+    }
+    try {
+      const data = JSON.parse(g.text);
+      if (!data.logs) throw new Error("bad");
+      setCloudRestore({ data, sha: g.sha, cloudSets: countLoggedSets(data), cloudDate: data.exported || null });
+    } catch (e) { setCloudRestore({ error: "The cloud copy isn't a valid backup." }); }
+  };
+  // Step 2, after Brian confirms: replace the phone's data and lift the pause — the phone now
+  // holds what the cloud holds. Caching the cloud sha lets the next sync update in one request.
+  const confirmCloudRestore = () => {
+    const cr = cloudRestore;
+    if (!cr || !cr.data) return;
+    applyBackup(cr.data);
+    const next = { ...syncRef.current, paused: false, lastError: null,
+                   files: { ...syncRef.current.files, [BUNDLE_PATH]: { sha: cr.sha, hash: "" } } };
+    syncRef.current = next; setSync(next); setCloudRestore(null);
+    flash("Restored from cloud");
+  };
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  // The confirm panel — a plain render function (never a component inside the app).
+  const renderCloudRestore = () => {
+    const cr = cloudRestore;
+    if (cr.busy) return <div className="syncstatus t-off">Fetching the cloud copy…</div>;
+    if (cr.error) return <div className="syncstatus t-warn">{cr.error}</div>;
+    const when = cr.cloudDate ? new Date(cr.cloudDate).toLocaleString("en-GB", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" }) : "an unknown date";
+    return (
+      <div className="cloudrestore">
+        <p>Cloud copy: <b>{plural(cr.cloudSets, "set")}</b> logged, saved {when}.<br />This phone: <b>{plural(countLoggedSets({ logs }), "set")}</b> logged.</p>
+        <p>Restoring replaces everything on this phone with the cloud copy.</p>
+        <div className="syncrow">
+          <button className="solid" onClick={confirmCloudRestore}>Replace phone data</button>
+          <button className="ghost" onClick={() => setCloudRestore(null)}>Cancel</button>
+        </div>
+      </div>
+    );
+  };
+
+  // Trigger: cold open (once both the training data and the sync config are loaded), and
+  // right after a key is saved.
+  const ready = status !== "loading";
+  useEffect(() => { if (ready && sync.token) doSync(); }, [ready, sync.token]);
+
+  // Trigger: Finish (or un-finish) a session.
+  useEffect(() => { if (loaded.current) doSync(); }, [sessDone]);
+
+  // Triggers: leaving the app and coming back. iOS freezes a home-screen app the moment it is
+  // hidden, so this uploads now rather than on a timer. Set logs alone wait for the 10-minute
+  // window (the phone is locked between sets); a pending note or a failed sync goes immediately.
+  // `pagehide` too: swiping the app away can skip `visibilitychange` on iOS.
+  useEffect(() => {
+    const onVis = () => {
+      const c = syncRef.current;
+      if (!c.token) return;
+      const recent = c.lastUpload && Date.now() - c.lastUpload < HIDDEN_THROTTLE_MS;
+      if (priorityDirty.current || c.lastError || !recent) doSync();
+    };
+    // [ADDED] audit gap 1 — back from a dead spot with the app open: catch up at once.
+    const onOnline = () => { if (syncRef.current.token) doSync(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", onVis);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pagehide", onVis);
+      window.removeEventListener("online", onOnline);
+    };
+  }, []);
 
   /* derived */
   const isTest = isTestSession(week, day);
@@ -1006,7 +1168,7 @@ export default function ConcurrentBlockTracker() {
         <p className="cue"><b>Cut order:</b> {px.selectionRule}</p>
         <p className="cue"><b>Progression gate:</b> {px.gate}</p>
         <input className="exnote" placeholder="Note — landing quality, actual time, next-morning response" value={exNotes[k3(ex.id)] || ""}
-          onChange={e => setExNotes(p => ({ ...p, [k3(ex.id)]: e.target.value }))} />
+          onChange={e => { setExNotes(p => ({ ...p, [k3(ex.id)]: e.target.value })); touchPriority(); }} />
       </section>
     );
   };
@@ -1066,7 +1228,7 @@ export default function ConcurrentBlockTracker() {
      One tap when normal; seven specifics when not. */
   const renderCheck = (ex) => {
     const c = addCheck[sessKey] || {};
-    const setC = (f, v) => setAddCheck(p => ({ ...p, [sessKey]: { ...(p[sessKey] || {}), [f]: v } }));
+    const setC = (f, v) => { setAddCheck(p => ({ ...p, [sessKey]: { ...(p[sessKey] || {}), [f]: v } })); touchPriority(); };
     const abnormal = c.post === "abnormal" || c.next === "abnormal";
     return (
       <section className={`card checkcard ${abnormal ? "alert" : ""}`} key={ex.id} data-exid={ex.id}>
@@ -1201,7 +1363,7 @@ export default function ConcurrentBlockTracker() {
         {rx.fallback && <p className="cue"><b>If unavailable:</b> {rx.fallback}</p>}
         {rx.progression && <details className="progdet"><summary>Progression rule</summary><p className="cue">{rx.progression}</p></details>}
         <input className="exnote" placeholder="Note for next week — e.g. 'go up in weight, felt too easy'" value={exNotes[k3(ex.id)] || ""}
-          onChange={e => setExNotes(p => ({ ...p, [k3(ex.id)]: e.target.value }))} />
+          onChange={e => { setExNotes(p => ({ ...p, [k3(ex.id)]: e.target.value })); touchPriority(); }} />
       </section>
     );
   };
@@ -1299,7 +1461,7 @@ export default function ConcurrentBlockTracker() {
         })}
         <div className="notes-label">Week-13 notes — which tests were deferred and why, and the elapsed weeks</div>
         <textarea value={notes[`${W13_WEEK}-fri`] || ""} placeholder="e.g. Pull-up deferred from W12 — elbow fatigue after the dip test. Run 8 days later."
-          onChange={e => setNotes(p => ({ ...p, [`${W13_WEEK}-fri`]: e.target.value }))} />
+          onChange={e => { setNotes(p => ({ ...p, [`${W13_WEEK}-fri`]: e.target.value })); touchPriority(); }} />
         <button className={`finishbtn ${sessDone[`${W13_WEEK}-fri`] ? "done-on" : ""}`}
           onClick={() => setSessDone(p => ({ ...p, [`${W13_WEEK}-fri`]: !p[`${W13_WEEK}-fri`] }))}>
           {sessDone[`${W13_WEEK}-fri`] ? "✓ WEEK 13 FINISHED" : "FINISH WEEK 13"}
@@ -1360,6 +1522,31 @@ export default function ConcurrentBlockTracker() {
       <div className="set-label">Weekly review — for the Claude Code coaching loop</div>
       <button className="solid full" onClick={() => copyText(buildReviewJSON(week), "AI report (JSON) copied — paste into Claude Code")}>Copy AI report (JSON)</button>
       <button className="solid full" onClick={() => copyText(buildReview(week), "Text report copied")} style={{ marginTop: 8 }}>Copy text report</button>
+      <div className="set-label">Cloud sync — private backup for the Saturday review</div>
+      {(() => {
+        const st = syncStatus(sync, Date.now()), ex = expiryText(sync, Date.now());
+        return <div className={`syncstatus t-${st.tone}`} role="status">{st.text}{ex && <span className="syncexp"> · {ex}</span>}</div>;
+      })()}
+      {!sync.token ? (
+        <>
+          <input className="synckey" type="password" autoComplete="off" autoCapitalize="off" spellCheck={false}
+            aria-label="GitHub key" placeholder="Paste the GitHub key (github_pat_…)"
+            value={keyDraft.token} onChange={e => setKeyDraft(k => ({ ...k, token: e.target.value }))} />
+          <input className="synckey" type="date" aria-label="Key expiry date"
+            value={keyDraft.expires} onChange={e => setKeyDraft(k => ({ ...k, expires: e.target.value }))} />
+          <button className="solid full" onClick={saveKey} disabled={!keyDraft.token.trim()}>Save key and sync</button>
+        </>
+      ) : (
+        <>
+          <div className="syncrow">
+            <button className="ghost" onClick={() => doSync()}>Sync now</button>
+            <button className="ghost" onClick={startCloudRestore}>Restore from cloud</button>
+          </div>
+          {sync.paused && <button className="ghost sync-full" onClick={forceUpload}>Keep this phone's data (overwrite cloud)</button>}
+          {cloudRestore && renderCloudRestore()}
+          <button className="ghost sync-full" onClick={turnOffSync}>Turn off sync</button>
+        </>
+      )}
       <div className="set-label">Restore from backup</div>
       <textarea placeholder="Paste a backup JSON here…" value={restorePaste} onChange={e => setRestorePaste(e.target.value)} />
       <button className="solid full" onClick={restoreBackup} disabled={!restorePaste.trim()}>Restore</button>
@@ -1378,7 +1565,10 @@ export default function ConcurrentBlockTracker() {
       <header className="hdr">
         <div className="hdr-row">
           <div className="brand">{(settings.planName || META.planName).toUpperCase()}</div>
-          <div className={`status s-${status}`}>{toast || (status === "saving" ? "Saving…" : status === "saved" ? "Saved" : status === "error" ? "Not saved" : "")}</div>
+          <div className={`status s-${status}`}>
+            {needsAttention(sync, Date.now()) && <span className="syncdot" role="img" aria-label="Cloud sync needs attention" />}
+            {toast || (status === "saving" ? "Saving…" : status === "saved" ? "Saved" : status === "error" ? "Not saved" : "")}
+          </div>
         </div>
         <div className="toolbar">
           <button className={`tool ${settingsOpen ? "on" : ""}`} onClick={() => setSettingsOpen(o => !o)}><span className="ic">⚙</span>Settings</button>
@@ -1522,7 +1712,7 @@ export default function ConcurrentBlockTracker() {
             {visibleEx.map(ex => renderCard(ex))}
             <div className="notes-label">Session notes — bar speed, tissue response, anything the coach should see</div>
             <textarea value={notes[sessKey] || ""} placeholder="e.g. Last OHP double slowed through the sticking region. Dips clean. Adductors quiet after the hill reps."
-              onChange={e => setNotes(p => ({ ...p, [sessKey]: e.target.value }))} />
+              onChange={e => { setNotes(p => ({ ...p, [sessKey]: e.target.value })); touchPriority(); }} />
             <button className={`finishbtn ${sessDone[sessKey] ? "done-on" : ""}`} onClick={() => {
               const nowDone = !sessDone[sessKey];
               setSessDone(p => ({ ...p, [sessKey]: nowDone }));
@@ -1704,6 +1894,16 @@ const css = `
 .tested-row label{flex:1;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .tested-row input{flex:1}
 .settings .set-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:14px 0 8px}
+.syncdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-right:6px;vertical-align:middle}
+.syncstatus{font-size:12.5px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
+.syncstatus.t-ok{color:var(--ok)}
+.syncstatus.t-warn,.syncstatus.t-bad{color:var(--warn)}
+.syncexp{color:var(--faint)}
+.synckey{font-family:'Inter'!important;font-size:14px!important;font-weight:400!important;text-align:left!important;padding:8px 12px!important;margin-top:8px;box-sizing:border-box}
+.syncrow{display:flex;gap:8px;margin-top:8px}
+.sync-full{width:100%;margin-top:8px;flex:none}
+.cloudrestore{margin-top:10px;padding:10px 12px;border:0.5px solid color-mix(in srgb,var(--accent) 10%,transparent);border-radius:9px;font-size:12.5px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.cloudrestore p{margin:0 0 8px}
 .swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .swatch{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:10px}
 .swatch.on{border-color:var(--accent)}

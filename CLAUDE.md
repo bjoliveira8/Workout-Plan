@@ -48,6 +48,7 @@ test.mjs                             ← jsdom smoke tests + PROGRAM INVARIANT g
 src/App.jsx                          ← the app: logic, UI, CSS (one file, by design)
 src/program.js                       ← GENERATED prescriptions — the single edit point for loads
 src/entry.jsx                        ← mount + localStorage shim for window.storage
+src/sync.js                          ← cloud sync to the private Workout-Data repo (no React; spec §4)
 tools/gen-program.mjs                ← one-shot: V3 source JSON → src/program.js
 tools/gen-block-doc.mjs              ← one-shot: source narrative → the program doc, with a cross-check
 docs/12-week-concurrent-block-v5.md  ← THE PROGRAM (source of truth)
@@ -119,7 +120,7 @@ Two rules make it safe, and `tools/gen-program.mjs` now ASSERTS both:
 `window.storage.get/set` (async, `{key, value}` shape, `get` THROWS on missing key).
 `src/entry.jsx` shims it onto localStorage. Storage key: **`pp-tracker-v3`** — kept across all
 four programs deliberately, so no user data is destroyed by a program change. **Never change
-it.** One debounced (700 ms) save of a single JSON bundle. Backup `version` is now **16**; the week report is version **17**.
+it.** One debounced (700 ms) save of a single JSON bundle. Backup `version` is now **16**; the week report is version **17**. Cloud sync keeps its own key, **`pp-sync-v1`** (the GitHub key, cached shas, status). It is never written into `pp-tracker-v3`, Copy backup, `data/bundle.json` or a report — test.mjs block 15 asserts it.
 
 **THE PROGRAM-COLLISION MIGRATION (do not remove).** Every saved bundle is stamped
 `program: "astra-synthesis-v5"` (`PROGRAM_ID`). A bundle carrying a different id was written by
@@ -151,7 +152,7 @@ border. `.app button` no longer sets `border` or `color`. Truly borderless butto
 
 **THE STALE-BUILD TRAP (guarded).** A failed `npm run build` leaves the previous `dist/index.html`
 in place, and the suite would then pass against the old bundle. `test.mjs` refuses to run if the
-bundle is older than `src/App.jsx`, `src/program.js`, `src/entry.jsx` or `build.mjs`. This caught
+bundle is older than `src/App.jsx`, `src/program.js`, `src/entry.jsx`, `src/sync.js` or `build.mjs`. This caught
 a real false pass during the v2.0 rewrite — do not remove it.
 
 **THE `.rx` OVERFLOW TRAP (fixed twice).** The prescription line must wrap. In v2.0,
@@ -273,8 +274,20 @@ the clipboard: prescribed vs actual per lift with system loads, bar speed, power
 allowance, running reps and metres against the ceiling, adductor checks, the live volume
 audit, minute budgets against the 75-minute hard limit, and trailing history per loaded lift. Brian pastes it into Claude
 Code, which applies `docs/autoregulation-criteria.md`, returns a plain-language brief, and — on
-approval — edits `src/program.js` and deploys. A text report is also available in Settings. No
-API calls from the app.
+approval — edits `src/program.js` and deploys. A text report is also available in Settings. The app's only network calls are cloud sync (§ Cloud sync below),
+and only once Brian has saved a key — with no key it makes none (test.mjs block 15a).
+
+## Cloud sync (Phase 1 of the weekly AI review)
+
+Spec: `docs/superpowers/specs/2026-10-04-weekly-ai-review-design.md` §4. The app copies the full
+backup (`data/bundle.json`, version 16) and week reports (`reports/week-NN.json`) to the PRIVATE
+repo `bjoliveira8/Workout-Data` with a fine-grained key scoped to that repo only. Triggers: tissue
+checks and notes 3 s after the edit; Finish; leaving or returning to the app (set logs at most every
+10 min; a pending note or a failed sync immediately); cold open; the phone regaining a signal
+(`online` event — a sync missed offline is remembered as `lastError: "offline"`). Unchanged files are never
+re-uploaded (the backup is hashed without `exported`). A conflict where the cloud holds more logged
+sets pauses sync instead of overwriting (second-device guard). **Never put training data in the
+public Workout-Plan repo.**
 
 ## Backlog / next steps
 
@@ -291,4 +304,5 @@ events), guards the historic traps (focus-loss, border-reset, stale-build, `.rx`
 zero-minute warm-up header, partial Rx fill), walks all 48 sessions plus week 13 for render
 errors, and enforces every program invariant above. Extend it
 when you add features. The one thing it cannot do is layout: check 375px overflow in a real
-browser by hand.
+browser by hand. Blocks 14–15 cover cloud sync with a fake GitHub (`fakeGitHub` in test.mjs) — engine unit
+tests and app-level triggers, privacy, Settings and Restore from cloud.

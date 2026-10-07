@@ -13,7 +13,7 @@ import { readFileSync, statSync } from "fs";
 
 // A failed build leaves a STALE dist/index.html behind, and the suite would then happily
 // pass against the previous bundle. Refuse to run unless the build is newer than its source.
-for (const src of ["src/App.jsx", "src/entry.jsx", "src/program.js", "build.mjs"]) {
+for (const src of ["src/App.jsx", "src/entry.jsx", "src/program.js", "src/sync.js", "build.mjs"]) {
   if (statSync(src).mtimeMs > statSync("dist/index.html").mtimeMs) {
     console.error(`FAIL: dist/index.html is older than ${src} — run \`npm run build\` and check it succeeded.`);
     process.exit(1);
@@ -762,6 +762,364 @@ else {
   if (!a3.includes("205") || !a3.includes("225")) fail.push("migration-not-idempotent");
   if ((s3.archived || []).length !== (stored.archived || []).length) fail.push("migration-archive-grew-on-reopen");
   d2.window.close(); d3.window.close();
+}
+
+/* A fake GitHub Contents API for the sync tests: an in-memory repo plus a log of every request.
+   `script(fn)` makes the NEXT request answer however fn says (401, oversized file, …). Buffer
+   does its own base64 so these tests don't lean on the code under test. */
+const b64 = (s) => Buffer.from(s, "utf8").toString("base64");
+const unb64 = (s) => Buffer.from(s, "base64").toString("utf8");
+const fakeGitHub = (seed = {}) => {
+  const repo = { ...seed };            // path → { text, sha }
+  const calls = []; const scripted = []; let n = 0;
+  const res = (status, body, raw) => ({ status, json: async () => body, text: async () => raw ?? JSON.stringify(body) });
+  const fetchImpl = async (url, init = {}) => {
+    const path = url.split("/contents/")[1].split("/").map(decodeURIComponent).join("/");
+    const method = init.method || "GET";
+    const hdrs = init.headers || {};
+    calls.push({ method, path, accept: hdrs.Accept || "", auth: hdrs.Authorization, body: init.body ? JSON.parse(init.body) : null });
+    if (scripted.length) return scripted.shift()(res, repo, path, init);
+    if (method === "GET") {
+      const f = repo[path];
+      if (!f) return res(404, { message: "Not Found" });
+      if ((hdrs.Accept || "").includes("raw")) return res(200, null, f.text);
+      return res(200, { sha: f.sha, encoding: "base64", content: b64(f.text) });
+    }
+    // PUT: GitHub demands the current sha to update, and refuses a stale one.
+    const body = JSON.parse(init.body);
+    const cur = repo[path];
+    if (cur && !body.sha) return res(422, { message: "sha wasn't supplied" });
+    if (cur && body.sha !== cur.sha) return res(409, { message: "sha mismatch" });
+    const sha = "sha" + (++n);
+    repo[path] = { text: unb64(body.content), sha };
+    return res(cur ? 200 : 201, { content: { sha } });
+  };
+  return { repo, calls, fetchImpl, script: (fn) => scripted.push(fn) };
+};
+
+// 14) CLOUD SYNC ENGINE (src/sync.js) — spec §4. A plain module, imported straight into Node.
+{
+  const S = await import("./src/sync.js");
+  // Compare as JSON so arrays and objects can be checked in one line.
+  const eq = (a, b, tag) => { if (JSON.stringify(a) !== JSON.stringify(b)) fail.push(`${tag}=${JSON.stringify(a)}`); };
+
+  // The key is trimmed (GitHub's copy button can add a space or newline) and the repo defaults right.
+  const cfg0 = S.normalizeConfig({ token: "  github_pat_TEST \n" });
+  if (cfg0.token !== "github_pat_TEST") fail.push("sync-token-not-trimmed");
+  if (cfg0.owner !== "bjoliveira8" || cfg0.repo !== "Workout-Data") fail.push("sync-default-repo");
+  if (S.reportPath(2) !== "reports/week-02.json" || S.reportPath(11) !== "reports/week-11.json") fail.push("sync-report-path");
+
+  // Hashing ignores the backup's `exported` stamp, and nothing else.
+  const b1 = JSON.stringify({ exported: "2026-10-03T10:00:00Z", logs: { 1: {} } });
+  const b2 = JSON.stringify({ exported: "2026-10-04T10:00:00Z", logs: { 1: {} } });
+  if (S.hashText(S.stableForHash(S.BUNDLE_PATH, b1)) !== S.hashText(S.stableForHash(S.BUNDLE_PATH, b2))) fail.push("sync-hash-sees-exported");
+  if (S.hashText(S.stableForHash(S.reportPath(1), b1)) === S.hashText(S.stableForHash(S.reportPath(1), b2))) fail.push("sync-report-hash-too-loose");
+  if (S.hashText("a") === S.hashText("b")) fail.push("sync-hash-collides");
+
+  // UTF-8 survives base64 both ways — iPhone notes carry –, ≤, ’ and emoji.
+  const uni = "Adductors quiet – RPE ≤4, it’s fine 💪";
+  if (S.decodeBase64Utf8(S.encodeBase64Utf8(uni)) !== uni) fail.push("sync-utf8-roundtrip");
+
+  // Logged-set count: only rows holding a weight or reps.
+  const logsFix = { 1: { sun: { dipheavy: [{ w: "45", r: "2" }, { w: "", r: "" }], bench: [{ w: "180" }] }, mon: { pullup: [null, { r: "3" }] } } };
+  if (S.countLoggedSets({ logs: logsFix }) !== 3) fail.push("sync-count=" + S.countLoggedSets({ logs: logsFix }));
+  if (S.countLoggedSets({}) !== 0 || S.countLoggedSets(null) !== 0) fail.push("sync-count-empty");
+
+  // Calendar week by LOCAL date: Sunday 27 Sep 2026 starts week 1, late Saturday is still the
+  // same week, the 1 Nov 2026 clock change shifts nothing, and the ends clamp to 1 and 12.
+  const cw = (y, m, d, h = 12) => S.calendarWeek(new Date(y, m - 1, d, h), "2026-09-27", 12);
+  eq([cw(2026, 9, 27), cw(2026, 10, 3, 23), cw(2026, 10, 4, 0), cw(2026, 11, 7, 23), cw(2026, 11, 8, 1), cw(2026, 9, 1), cw(2027, 3, 1)],
+     [1, 1, 2, 6, 7, 1, 12], "sync-calendar-week");
+
+  // Status words and the header dot.
+  const now = Date.UTC(2026, 9, 10, 18, 7);
+  const on = S.normalizeConfig({ token: "github_pat_TEST" });
+  if (S.syncStatus(S.normalizeConfig({}), now).tone !== "off") fail.push("sync-status-off");
+  if (!S.syncStatus({ ...on, lastOk: now - 120000 }, now).text.startsWith("Synced 2 min ago")) fail.push("sync-status-ok");
+  if (!S.syncStatus({ ...on, paused: true }, now).text.startsWith("Sync paused")) fail.push("sync-status-paused");
+  if (!S.syncStatus({ ...on, lastError: "auth" }, now).text.startsWith("Key expired")) fail.push("sync-status-auth");
+  if (!S.syncStatus({ ...on, lastError: "error:0" }, now).text.startsWith("Last sync failed")) fail.push("sync-status-error");
+  // [ADDED] audit gap 1: no signal is reported as "offline", not as a failure.
+  if (!S.syncStatus({ ...on, lastError: "offline" }, now).text.startsWith("Offline")) fail.push("sync-status-offline");
+  if (S.needsAttention(S.normalizeConfig({}), now)) fail.push("sync-dot-when-off");
+  if (S.needsAttention({ ...on, lastOk: now - 3600000 }, now)) fail.push("sync-dot-when-fresh");
+  if (!S.needsAttention({ ...on, lastOk: now - S.DAY_MS - 1 }, now)) fail.push("sync-dot-missing-after-24h");
+  if (!S.needsAttention({ ...on, lastOk: now, paused: true }, now)) fail.push("sync-dot-missing-when-paused");
+  if (!S.expiryText({ ...on, tokenExpires: "2027-01-31" }, now).startsWith("Key expires 31 Jan 2027")) fail.push("sync-expiry-text");
+  if (!S.expiryText({ ...on, tokenExpires: "2026-10-20" }, now).endsWith("renew soon")) fail.push("sync-expiry-soon");
+  if (!S.expiryText({ ...on, tokenExpires: "2026-10-01" }, now).startsWith("Key expired")) fail.push("sync-expiry-past");
+
+  // ── the network half ──
+  const files = (bundleText, extra = []) =>
+    [{ path: S.BUNDLE_PATH, text: bundleText, localSets: S.countLoggedSets(JSON.parse(bundleText)) }, ...extra];
+  const bundleA = JSON.stringify({ exported: "x", logs: logsFix });                 // 3 sets
+  const rep = { path: S.reportPath(2), text: '{"week":2}' };
+
+  // Off, or offline: no network at all.
+  { const gh = fakeGitHub();
+    const r = await S.runSync(S.normalizeConfig({}), files(bundleA), { fetchImpl: gh.fetchImpl, now });
+    if (r.outcome !== "no_token" || gh.calls.length) fail.push("sync-no-token-touched-network");
+    const r2 = await S.runSync(on, files(bundleA), { fetchImpl: gh.fetchImpl, now, online: false });
+    if (r2.outcome !== "offline" || gh.calls.length) fail.push("sync-offline-touched-network");
+    // [ADDED] audit gap 1: the miss is remembered, so the next return to the app retries at once.
+    if (r2.patch.lastError !== "offline") fail.push("sync-offline-not-remembered"); }
+
+  // First sync into an empty repo: look first (404), then create; sha and hash are cached.
+  const gh = fakeGitHub();
+  let r = await S.runSync(on, files(bundleA, [rep]), { fetchImpl: gh.fetchImpl, now });
+  eq(gh.calls.map((c) => c.method + " " + c.path),
+     ["GET data/bundle.json", "PUT data/bundle.json", "GET reports/week-02.json", "PUT reports/week-02.json"], "sync-first-calls");
+  if (r.outcome !== "ok" || r.patch.lastOk !== now || r.patch.lastUpload !== now) fail.push("sync-first-outcome");
+  if (gh.calls[1].auth !== "Bearer github_pat_TEST") fail.push("sync-auth-header");
+  if (JSON.parse(gh.repo["data/bundle.json"].text).logs[1].sun.bench[0].w !== "180") fail.push("sync-bundle-content");
+  let cfg = { ...on, ...r.patch };
+
+  // Same content again (only `exported` moved): zero requests, and lastUpload stays put.
+  gh.calls.length = 0;
+  r = await S.runSync(cfg, files(JSON.stringify({ exported: "y", logs: logsFix }), [rep]), { fetchImpl: gh.fetchImpl, now: now + 1 });
+  if (gh.calls.length || r.outcome !== "ok" || r.uploaded.length) fail.push("sync-unchanged-not-free");
+  if ("lastUpload" in r.patch) fail.push("sync-unchanged-moved-lastUpload");
+  cfg = { ...cfg, ...r.patch };
+
+  // Changed content: exactly ONE request, using the cached sha.
+  gh.calls.length = 0;
+  const logsB = JSON.parse(JSON.stringify(logsFix)); logsB[1].wed = { ohptop: [{ w: "117.5", r: "2" }] };
+  const bundleB = JSON.stringify({ exported: "z", logs: logsB });                   // 4 sets
+  r = await S.runSync(cfg, files(bundleB, [rep]), { fetchImpl: gh.fetchImpl, now: now + 2 });
+  eq(gh.calls.map((c) => c.method + " " + c.path), ["PUT data/bundle.json"], "sync-changed-one-request");
+  cfg = { ...cfg, ...r.patch };
+
+  // 401: stop, say "auth", keep the cache.
+  gh.script((res) => res(401, { message: "Bad credentials" }));
+  r = await S.runSync(cfg, files(JSON.stringify({ logs: { ...logsB, 2: { sun: { bench: [{ w: "185" }] } } } })), { fetchImpl: gh.fetchImpl, now: now + 3 });
+  if (r.outcome !== "auth" || r.patch.lastError !== "auth" || r.patch.lastOk !== undefined) fail.push("sync-401");
+
+  // Conflict, and the cloud holds MORE training (another device): pause, never overwrite.
+  { const remote = JSON.stringify({ logs: { ...logsB, 3: { fri: { squat: [{ w: "225" }, { w: "225" }, { w: "225" }] } } } }); // 7 sets
+    const g2 = fakeGitHub({ "data/bundle.json": { text: remote, sha: "remote1" } });
+    const c2 = { ...on, files: { "data/bundle.json": { sha: "stale", hash: "old" } } };
+    const r2 = await S.runSync(c2, files(bundleB), { fetchImpl: g2.fetchImpl, now });
+    if (r2.outcome !== "paused" || r2.patch.paused !== true) fail.push("sync-conflict-not-paused");
+    if (g2.repo["data/bundle.json"].text !== remote) fail.push("sync-conflict-overwrote-cloud");
+    eq(g2.calls.map((c) => c.method), ["PUT", "GET"], "sync-conflict-calls");
+    // Paused stays paused, with no requests, until Restore or an explicit overwrite.
+    g2.calls.length = 0;
+    const r3 = await S.runSync({ ...c2, ...r2.patch }, files(bundleB), { fetchImpl: g2.fetchImpl, now });
+    if (r3.outcome !== "paused" || g2.calls.length) fail.push("sync-paused-not-sticky");
+    const r4 = await S.runSync({ ...c2, ...r2.patch }, files(bundleB), { fetchImpl: g2.fetchImpl, now, force: true });
+    if (r4.outcome !== "ok" || r4.patch.paused !== false || JSON.parse(g2.repo["data/bundle.json"].text).logs[3]) fail.push("sync-force-overwrite"); }
+
+  // Conflict, and the cloud holds LESS (a stale cache on this phone): refresh the sha, upload.
+  { const g3 = fakeGitHub({ "data/bundle.json": { text: JSON.stringify({ logs: {} }), sha: "remote1" } });
+    const r5 = await S.runSync({ ...on, files: { "data/bundle.json": { sha: "stale", hash: "old" } } }, files(bundleB), { fetchImpl: g3.fetchImpl, now });
+    if (r5.outcome !== "ok") fail.push("sync-stale-cache-not-recovered");
+    eq(g3.calls.map((c) => c.method), ["PUT", "GET", "PUT"], "sync-stale-cache-calls"); }
+
+  // First sync from a NEW device whose cloud copy holds more: pause before writing anything.
+  { const g4 = fakeGitHub({ "data/bundle.json": { text: bundleB, sha: "remote1" } });
+    const r6 = await S.runSync(on, files(JSON.stringify({ logs: {} })), { fetchImpl: g4.fetchImpl, now });
+    if (r6.outcome !== "paused" || g4.calls.some((c) => c.method === "PUT")) fail.push("sync-new-device-overwrote"); }
+
+  // Network failure, and a request that never answers: an error — never a crash or a hang.
+  { const r7 = await S.runSync(on, files(bundleA), { fetchImpl: async () => { throw new TypeError("Load failed"); }, now });
+    if (r7.outcome !== "error" || !String(r7.patch.lastError).startsWith("error")) fail.push("sync-network-error");
+    const t0 = Date.now();
+    const r8 = await S.runSync(on, files(bundleA), { fetchImpl: () => new Promise(() => {}), now, timeoutMs: 50 });
+    if (r8.outcome !== "error" || Date.now() - t0 > 2000) fail.push("sync-hang-not-timed-out"); }
+
+  // Files over 1 MB come back without inline content: fetch the raw body instead.
+  { const g5 = fakeGitHub({ "data/bundle.json": { text: bundleB, sha: "big1" } });
+    g5.script((res) => res(200, { sha: "big1", encoding: "none", content: "" }));
+    const g = await S.ghGet(on, S.BUNDLE_PATH, g5.fetchImpl);
+    if (g.status !== 200 || g.sha !== "big1" || g.text !== bundleB) fail.push("sync-large-file-fallback");
+    if (!g5.calls[1] || !g5.calls[1].accept.includes("raw")) fail.push("sync-large-file-raw-accept"); }
+
+  // One sync at a time, and a failed task never jams the queue.
+  { const q = S.createQueue(); const order = [];
+    const a = q(async () => { order.push("a1"); await new Promise((res) => setTimeout(res, 30)); order.push("a2"); });
+    const b = q(async () => { order.push("b"); });
+    await Promise.all([a, b]);
+    eq(order, ["a1", "a2", "b"], "sync-queue-order");
+    const c = q(async () => { throw new Error("x"); }).catch(() => "caught");
+    const d = q(async () => "ran");
+    if ((await c) !== "caught" || (await d) !== "ran") fail.push("sync-queue-jammed"); }
+}
+
+// 15) CLOUD SYNC IN THE APP — triggers and privacy (spec §4.3). Each case boots a fresh copy of
+//     the app with a fake GitHub and, when needed, a saved sync config.
+{
+  const TOKEN = "github_pat_SECRET_123";
+  const on = { token: TOKEN, tokenExpires: "2027-01-31" };
+  const boot = async ({ syncCfg, bundle, gh } = {}) => {
+    const d = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true, runScripts: "dangerously",
+      beforeParse(w) {
+        w.fetch = gh ? gh.fetchImpl : undefined;
+        if (syncCfg) w.localStorage.setItem("pp-sync-v1", JSON.stringify(syncCfg));
+        if (bundle) w.localStorage.setItem("pp-tracker-v3", bundle);
+      } });
+    await new Promise((r) => setTimeout(r, 1400));
+    return d;
+  };
+  // Real typing inside a booted copy (its own window's value setter, as React needs).
+  const typeIn = (w, el, v) => {
+    const proto = el.tagName === "TEXTAREA" ? w.HTMLTextAreaElement.prototype : w.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value").set.call(el, v);
+    el.dispatchEvent(new w.Event("input", { bubbles: true }));
+  };
+  const setVisibility = (w, state) => {
+    Object.defineProperty(w.document, "visibilityState", { value: state, configurable: true });
+    w.document.dispatchEvent(new w.Event("visibilitychange"));
+  };
+  const puts = (gh) => gh.calls.filter((c) => c.method === "PUT").map((c) => c.path);
+
+  // a) Sync OFF (no key): the app makes no network request at all, even on Finish.
+  { const gh = fakeGitHub(); const d = await boot({ gh });
+    d.window.document.querySelector(".finishbtn").click();
+    await wait(400);
+    if (gh.calls.length) fail.push("app-sync-off-made-requests=" + gh.calls.length);
+    d.window.close(); }
+
+  // b–e share one booted copy with sync ON.
+  const gh = fakeGitHub(); const d = await boot({ syncCfg: on, gh }); const w = d.window, docS = w.document;
+  await wait(300);
+
+  // b) Opening the app uploads the backup and a week report; the key appears nowhere in them,
+  //    nor in pp-tracker-v3, nor in Copy backup.
+  if (!puts(gh).includes("data/bundle.json")) fail.push("app-open-no-bundle-upload");
+  if (!puts(gh).some((p) => /^reports\/week-\d\d\.json$/.test(p))) fail.push("app-open-no-report-upload");
+  if (!(gh.repo["data/bundle.json"]?.text || "").includes('"logs"')) fail.push("app-bundle-not-a-backup");
+  for (const f of Object.values(gh.repo)) if (f.text.includes(TOKEN)) fail.push("app-token-uploaded");
+  if ((w.localStorage.getItem("pp-tracker-v3") || "").includes(TOKEN)) fail.push("app-token-in-pp-tracker-v3");
+  let copiedB = null;
+  Object.defineProperty(w.navigator, "clipboard", { value: { writeText: async (t) => { copiedB = t; } }, configurable: true });
+  [...docS.querySelectorAll(".tool")].find((b) => b.textContent.includes("Backup")).click();
+  await wait(100);
+  if (!copiedB || copiedB.includes(TOKEN)) fail.push("app-token-in-copy-backup");
+
+  // c) Finish uploads again (the session changed).
+  gh.calls.length = 0;
+  docS.querySelector(".finishbtn").click();
+  await wait(300);
+  if (!puts(gh).includes("data/bundle.json")) fail.push("app-finish-no-upload");
+
+  // d) The Saturday-morning check: "Next morning" uploads ~3 s later, with the app still open.
+  gh.calls.length = 0;
+  [...docS.querySelectorAll(".tab")].find((b) => b.textContent.includes("FRI")).click();
+  await wait(200);
+  const nm = docS.querySelector('button[aria-label="Next morning adductor normal"]');
+  if (!nm) fail.push("app-no-next-morning-check");
+  else {
+    nm.click();
+    await wait(1000);
+    if (puts(gh).length) fail.push("app-priority-sync-too-early");
+    await wait(2800);
+    if (!(gh.repo["data/bundle.json"]?.text || "").includes('"next":"normal"')) fail.push("app-next-morning-not-synced");
+  }
+
+  // e) Leaving and returning: a set log alone waits for the 10-minute window (the phone is
+  //    locked between sets) — but a note goes up the moment the app is hidden.
+  gh.calls.length = 0;
+  const wt = docS.querySelector('input[aria-label$="set 1 weight"]');
+  typeIn(w, wt, "100");
+  await wait(900);
+  setVisibility(w, "hidden"); await wait(300);
+  setVisibility(w, "visible"); await wait(300);
+  if (puts(gh).length) fail.push("app-set-log-ignored-throttle");
+  const note = docS.querySelector('textarea[placeholder^="e.g. Last OHP double"]');
+  typeIn(w, note, "Adductors quiet – fine");
+  await wait(200);
+  setVisibility(w, "hidden"); await wait(400);
+  if (!(gh.repo["data/bundle.json"]?.text || "").includes("Adductors quiet – fine")) fail.push("app-hidden-dropped-note");
+  setVisibility(w, "visible");
+
+  // e3) [ADDED] audit gap 2 — swiping the app away can skip visibilitychange on iOS: pagehide
+  //     alone must carry a pending note.
+  typeIn(w, note, "Calves fine after pogos");
+  await wait(200);
+  w.dispatchEvent(new w.Event("pagehide"));
+  await wait(400);
+  if (!(gh.repo["data/bundle.json"]?.text || "").includes("Calves fine after pogos")) fail.push("app-pagehide-dropped-note");
+
+  // e2) [ADDED] audit gap 1 — no signal: Finish makes no request, and the "online" event
+  //     catches up at once.
+  gh.calls.length = 0;
+  Object.defineProperty(w.navigator, "onLine", { value: false, configurable: true });
+  docS.querySelector(".finishbtn").click();
+  await wait(300);
+  if (gh.calls.length) fail.push("app-offline-made-requests");
+  Object.defineProperty(w.navigator, "onLine", { value: true, configurable: true });
+  w.dispatchEvent(new w.Event("online"));
+  await wait(300);
+  if (!puts(gh).includes("data/bundle.json")) fail.push("app-online-no-catch-up");
+  d.window.close();
+
+  const openSettings = async (docX) => {
+    [...docX.querySelectorAll(".tool")].find((b) => b.textContent.includes("Settings")).click();
+    await wait(150);
+  };
+  const button = (docX, text) => [...docX.querySelectorAll("button")].find((b) => b.textContent.includes(text));
+
+  // f) Pasting a key (with the stray spaces GitHub's copy can add) saves it trimmed, in
+  //    pp-sync-v1 only, keeps the default expiry, hides the field, and syncs straight away.
+  { const ghF = fakeGitHub(); const dF = await boot({ gh: ghF }); const wF = dF.window, docF = wF.document;
+    await openSettings(docF);
+    if (!docF.querySelector(".syncstatus") || !docF.querySelector(".syncstatus").textContent.includes("Cloud sync is off")) fail.push("app-sync-off-not-shown");
+    const key = docF.querySelector('input[aria-label="GitHub key"]');
+    if (!key) fail.push("app-no-key-field");
+    else {
+      typeIn(wF, key, "   " + TOKEN + "  ");
+      await wait(50);
+      button(docF, "Save key and sync").click();
+      await wait(900);
+      const saved = JSON.parse(wF.localStorage.getItem("pp-sync-v1") || "{}");
+      if (saved.token !== TOKEN) fail.push("app-key-not-trimmed-or-saved");
+      if (saved.tokenExpires !== "2027-01-31") fail.push("app-key-expiry-default");
+      if ((wF.localStorage.getItem("pp-tracker-v3") || "").includes(TOKEN)) fail.push("app-key-leaked-to-bundle");
+      if (!puts(ghF).includes("data/bundle.json")) fail.push("app-key-save-no-sync");
+      if (docF.querySelector('input[aria-label="GitHub key"]')) fail.push("app-key-field-still-shown");
+      if (!docF.querySelector(".syncstatus").textContent.includes("Synced")) fail.push("app-synced-not-shown");
+      // [ADDED] audit gap 4 — Turn off sync forgets the key and shows the field again.
+      button(docF, "Turn off sync").click();
+      await wait(300);
+      if (JSON.parse(wF.localStorage.getItem("pp-sync-v1") || "{}").token) fail.push("app-turn-off-kept-key");
+      if (!docF.querySelector('input[aria-label="GitHub key"]')) fail.push("app-turn-off-no-key-field");
+    }
+    dF.window.close(); }
+
+  // g) GitHub refuses the key (401): Settings says so in plain words and the header shows the dot.
+  { const ghG = fakeGitHub(); const dG = await boot({ syncCfg: on, gh: ghG }); const wG = dG.window, docG = wG.document;
+    await wait(300);
+    if (docG.querySelector(".syncdot")) fail.push("app-dot-when-healthy");
+    typeIn(wG, docG.querySelector('input[aria-label$="set 1 weight"]'), "90");
+    await wait(900);
+    await openSettings(docG);
+    ghG.script((res) => res(401, { message: "Bad credentials" }));
+    button(docG, "Sync now").click();
+    await wait(400);
+    if (!docG.querySelector(".syncstatus").textContent.includes("Key expired")) fail.push("app-401-not-explained");
+    if (!docG.querySelector(".syncdot")) fail.push("app-401-no-header-dot");
+    dG.window.close(); }
+
+  // h) Restore from cloud: shows both counts, writes nothing until confirmed, then replaces the
+  //    phone's data and lifts the pause.
+  { const cloud = JSON.stringify({ app: "concurrent-block", program: "astra-synthesis-v5", version: 16,
+      exported: "2026-10-03T09:00:00.000Z", logs: { 1: { sun: { dipheavy: [{ w: "47.5", r: "2", rir: "2" }] } } }, settings: {} });
+    const ghH = fakeGitHub({ "data/bundle.json": { text: cloud, sha: "c1" } });
+    const dH = await boot({ syncCfg: { ...on, paused: true }, gh: ghH }); const wH = dH.window, docH = wH.document;
+    await openSettings(docH);
+    if (!docH.querySelector(".syncstatus").textContent.includes("Sync paused")) fail.push("app-paused-not-shown");
+    if (!button(docH, "Keep this phone's data")) fail.push("app-no-force-option-when-paused");
+    button(docH, "Restore from cloud").click();
+    await wait(300);
+    const box = docH.querySelector(".cloudrestore");
+    if (!box || !box.textContent.includes("Cloud copy: 1 set") || !box.textContent.includes("This phone: 0 sets")) fail.push("app-restore-counts");
+    if (ghH.repo["data/bundle.json"].text !== cloud) fail.push("app-restore-wrote-before-confirm");
+    button(docH, "Replace phone data").click();
+    await wait(1100);
+    const stH = JSON.parse(wH.localStorage.getItem("pp-tracker-v3") || "{}");
+    if (!JSON.stringify(stH.logs || {}).includes("47.5")) fail.push("app-restore-not-applied");
+    if (JSON.parse(wH.localStorage.getItem("pp-sync-v1") || "{}").paused) fail.push("app-restore-left-paused");
+    dH.window.close(); }
 }
 
 if (fail.length) { console.error("FAIL: " + fail.join(", ")); process.exit(1); }

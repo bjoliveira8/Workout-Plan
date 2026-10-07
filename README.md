@@ -89,6 +89,7 @@ everything, archives included, across devices.
 - `src/App.jsx` — the app: logic, UI, CSS-in-JS string
 - `src/program.js` — generated prescriptions; the single edit point for every load
 - `src/entry.jsx` — mount + localStorage shim for the `window.storage` API
+- `src/sync.js` — cloud sync to the private `Workout-Data` repo (see the setup guide below)
 - `tools/gen-program.mjs` — one-shot generator: source plan JSON → `src/program.js`
 - `tools/gen-block-doc.mjs` — one-shot generator for the program document, with a cross-check
   that refuses to publish if the document and the data disagree
@@ -97,3 +98,18 @@ everything, archives included, across devices.
 - `docs/source/` — the V3 planning artifacts (data, block, cards, verification, change log, build scripts), vendored read-only
 - `docs/archive/` — the four superseded programs and their sources, kept for reference
 - `index.html` — the built file GitHub Pages serves (`dist/` is a local build artifact and is not committed)
+
+## Cloud sync — one-time setup (private backup for the Saturday review)
+
+1. **Private repo.** `bjoliveira8/Workout-Data`, **private** — never make it public.
+2. **Key.** github.com → your photo → **Settings** → **Developer settings** → **Personal access
+   tokens** → **Fine-grained tokens** → **Generate new token**.
+   - Name: `Workout tracker sync` · Expiration: **Custom → 31 Jan 2027**
+   - Repository access: **Only select repositories → Workout-Data**
+   - Permissions → Repository permissions → **Contents: Read and write** (nothing else)
+   - **Generate token**, then copy it (it is shown once).
+3. **Phone.** Open the tracker → **Settings** → **Cloud sync** → paste the key → check the date
+   says 31 Jan 2027 → **Save key and sync**. The line underneath should read "Synced just now".
+
+If the line ever says "Key expired", repeat steps 2–3. If it says "Sync paused", the cloud copy
+holds more training than the phone: tap **Restore from cloud** unless you know the phone is right.
