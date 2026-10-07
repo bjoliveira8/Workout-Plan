@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "program": "astra-synthesis-v5",
+  "reviewedWeek": 2,
+  "forWeek": 3,
+  "createdAt": "2026-10-10T18:07:00Z",
+  "basedOn": {
+    "bundleExported": "2026-10-10T17:55:00.000Z"
+  },
+  "status": "proposed",
+  "fatigueLevel": 1,
+  "fatigueEvidence": "One poor exposure: Wednesday's OHP top double came in at 1 RIR against 2–3.",
+  "findings": [
+    {
+      "kind": "observation",
+      "text": "Wed OHP top double at 117.5: first set 1 RIR against a 2–3 target."
+    },
+    {
+      "kind": "hypothesis",
+      "text": "Short sleep before Wednesday may explain it — one exposure only."
+    }
+  ],
+  "summary": "Hold the OHP top double at 117.5 and rest toward 3:00; everything else as planned.",
+  "alerts": [
+    {
+      "level": "info",
+      "days": [
+        "wed"
+      ],
+      "text": "Start the OHP ramp a few minutes earlier to fit the longer rests.",
+      "rule": "§6"
+    }
+  ],
+  "changes": [
+    {
+      "day": "wed",
+      "id": "ohptop",
+      "field": "load",
+      "from": 120,
+      "to": 122.5,
+      "why": "Fixture change.",
+      "rule": "fixture",
+      "reverseIf": "Fixture reversal."
+    }
+  ],
+  "holds": [
+    {
+      "day": "fri",
+      "id": "squat",
+      "why": "Last exposure was 2 RIR; squat increases need 3.",
+      "rule": "§2"
+    }
+  ],
+  "notes": [
+    {
+      "day": "fri",
+      "id": "calfseat",
+      "text": "Every set reached 20 — add the smallest load step.",
+      "rule": "§5 calves"
+    }
+  ],
+  "check": {
+    "passed": true,
+    "failures": []
+  }
+}

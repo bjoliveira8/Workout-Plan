@@ -243,3 +243,9 @@ export const createQueue = () => {
     return run;
   };
 };
+
+/* Saturday review (Phases 2–3): the routine writes proposals/week-NN.json, NN = the week the
+   proposal is FOR. The app reads them on open, on Sync now, and on return to the app at most
+   every 30 minutes. */
+export const proposalPath = (w) => `proposals/week-${String(w).padStart(2, "0")}.json`;
+export const PROPOSAL_REFETCH_MS = 30 * 60 * 1000;

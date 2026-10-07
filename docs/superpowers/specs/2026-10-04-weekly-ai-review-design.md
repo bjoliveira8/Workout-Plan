@@ -408,7 +408,7 @@ tables:
 | Practice week | Required outcome |
 |---|---|
 | Normal week, every first set inside its reserve | `hold` or planned increments only; fatigue 0 |
-| Wed OHP first work set 1 RIR harder than prescribed | Fatigue level 1; next week's `ohptop` **held** at this week's load (planned increment not taken), rest toward 3:00 allowed, each change with a `reverseIf`; no other lift changed |
+| Wed OHP first work set 1 RIR harder than prescribed | Fatigue level 1; next week's `ohptop` **held** at this week's load (planned increment not taken), rest toward 3:00 allowed, each change with a `reverseIf`. Updated 2026-10-07 (Brian — the block wins): the same day's back-offs may follow the top double (~96%) and Wednesday's cut-first sets may drop; nothing on any other day changes |
 | Abnormal next-morning adductor check after Friday | `stop` alert pinned to Wed + Fri; no impact or sprint progression |
 | No report for the week | `no-data` |
 

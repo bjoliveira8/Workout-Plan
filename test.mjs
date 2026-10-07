@@ -13,7 +13,7 @@ import { readFileSync, statSync } from "fs";
 
 // A failed build leaves a STALE dist/index.html behind, and the suite would then happily
 // pass against the previous bundle. Refuse to run unless the build is newer than its source.
-for (const src of ["src/App.jsx", "src/entry.jsx", "src/program.js", "src/sync.js", "build.mjs"]) {
+for (const src of ["src/App.jsx", "src/entry.jsx", "src/program.js", "src/sync.js", "src/review.js", "build.mjs"]) {
   if (statSync(src).mtimeMs > statSync("dist/index.html").mtimeMs) {
     console.error(`FAIL: dist/index.html is older than ${src} — run \`npm run build\` and check it succeeded.`);
     process.exit(1);
@@ -252,13 +252,15 @@ else {
   await wait(150);
   try {
     const j = JSON.parse(copied);
-    if (j.version !== 17 || j.kind !== "week-report" || !Array.isArray(j.days)) fail.push("json-shape");
+    if (j.version !== 18 || j.kind !== "week-report" || !Array.isArray(j.days)) fail.push("json-shape");
     if (!j.volumeAudit || !j.phase || !j.targetRir || !j.source) fail.push("json-week-fields");
     if (j.days.length !== 4) fail.push("json-day-count");
     const sun = j.days.find((d) => d.day === "sun");
     const dip = sun.exercises.find((e) => e.id === "dipheavy");
     if (!dip || !dip.isPrimary || !("barSpeed" in dip) || !dip.rx || !dip.cut) fail.push("json-primary-fields");
     if (dip.rx.systemLoad !== 215) fail.push("json-system-load=" + dip.rx.systemLoad);
+    // Version 18: every row carries the heaviest completed load, so the review can see a stall.
+    if (!("performedLoad" in dip) || dip.performedLoad !== 45) fail.push("json-performed-load=" + dip.performedLoad);
     if (sun.impact !== null) fail.push("json-sunday-has-impact");
     const wed = j.days.find((d) => d.day === "wed");
     if (!wed.impact || !Array.isArray(wed.impact.tiers)) fail.push("json-impact");
@@ -1120,6 +1122,383 @@ const fakeGitHub = (seed = {}) => {
     if (!JSON.stringify(stH.logs || {}).includes("47.5")) fail.push("app-restore-not-applied");
     if (JSON.parse(wH.localStorage.getItem("pp-sync-v1") || "{}").paused) fail.push("app-restore-left-paused");
     dH.window.close(); }
+}
+
+// 16) WEEKLY REVIEW RULES (src/review.js) — spec §6: every row of §6.1, every rail of §6.2,
+//     the effective table, and the fetch merge. Imported straight into Node like sync.js.
+{
+  const R = await import("./src/review.js");
+  const { SESSIONS: SS, META: M, AUDIT: A } = await import("./src/program.js");
+  const ok = (v, tag) => { if (!v.ok) fail.push(`${tag}=${v.reason || (v.failures || []).join("; ")}`); };
+  const no = (v, tag) => { if (v.ok) fail.push(tag); };
+  const ctx = (forWeek, lp = {}) => ({ sessions: SS, forWeek, lastPerformedFor: (d, id) => lp[`${d}-${id}`] ?? null });
+  const ch = (day, id, field, from, to) => ({ day, id, field, from, to, why: "test", rule: "test", reverseIf: "test" });
+
+  // The step map covers every numeric-load item in all twelve weeks (this would have caught dlback).
+  for (let w = 1; w <= 12; w++) for (const d of R.DAY_IDS) for (const it of SS[w][d].items)
+    if (typeof it.load === "number" && !(it.id in R.STEP_MAP)) fail.push(`step-map-missing:${it.id}`);
+  if (R.STEP_MAP.dlback !== 10 || R.STEP_MAP.dl !== 10 || R.STEP_MAP.squat !== 5 || R.STEP_MAP.ohptop !== 2.5) fail.push("step-map-values");
+
+  // The rails' own audit agrees with the generated AUDIT, and the rails accept the unchanged plan.
+  for (let w = 1; w <= 12; w++) {
+    const a = R.auditWeek(SS[w]);
+    for (const k of ["press", "vertical", "horizontal", "biceps", "triceps", "calves", "lower", "shoulder", "abs", "unilateral", "powerDays", "carry", "adductor", "ratio"])
+      if (a[k] !== A[w][k]) fail.push(`review-audit-${k}:w${w}=${a[k]}!=${A[w][k]}`);
+    const rails = R.checkRails(w, SS, SS);
+    if (!rails.ok) fail.push(`rails-reject-plan:w${w}=${rails.failures.join("; ")}`);
+  }
+
+  // load — week 3 Wednesday OHP top double is 120 (2.5 lb steps); Monday deadlift back-off 405 (10 lb).
+  ok(R.validateChange(ch("wed", "ohptop", "load", 120, 117.5), ctx(3)), "load-hold-rejected");
+  no(R.validateChange(ch("wed", "ohptop", "load", 120, 122.5), ctx(3)), "load-above-plan-accepted");
+  no(R.validateChange(ch("wed", "ohptop", "load", 120, 105), ctx(3, { "wed-ohptop": 117.5 })), "load-under-floor-accepted");
+  ok(R.validateChange(ch("wed", "ohptop", "load", 120, 112.5), ctx(3, { "wed-ohptop": 117.5 })), "load-two-steps-under-last-rejected");
+  no(R.validateChange(ch("mon", "dlback", "load", 405, 402.5), ctx(3)), "dlback-2.5-step-accepted");
+  ok(R.validateChange(ch("mon", "dlback", "load", 405, 395), ctx(3)), "dlback-10-step-rejected");
+  no(R.validateChange(ch("wed", "ohptop", "load", 117.5, 115), ctx(3)), "load-stale-from-accepted");
+  no(R.validateChange(ch("sun", "row", "load", null, 50), ctx(3)), "load-on-unloaded-accepted");
+  // A deload never sets the floor: week 6 is skipped when looking back from week 7.
+  if (R.lastPerformedLoad({ 5: 120, 6: 100 }, 7) !== 120) fail.push("deload-set-the-floor");
+  if (R.lastPerformedLoad({ 5: 120, 6: 100, 7: 122.5 }, 8) !== 122.5) fail.push("last-performed-latest");
+  if (R.performedLoad([{ w: "115", r: "2" }, { w: "117.5", r: "2" }, { w: "125", r: "" }]) !== 117.5) fail.push("performed-load");
+  if (R.lastPerformedFromLogs({ 2: { wed: { ohptop: [{ w: "117.5", r: "2" }] } } }, "wed", "ohptop", 3) !== 117.5) fail.push("last-performed-logs");
+  // sets — Sunday bench 3 (protected 2); Sunday dip back-offs 3 (protected 3).
+  ok(R.validateChange(ch("sun", "bench", "sets", 3, 2), ctx(3)), "sets-cut-rejected");
+  no(R.validateChange(ch("sun", "bench", "sets", 3, 1), ctx(3)), "single-set-accepted");
+  no(R.validateChange(ch("sun", "dipback", "sets", 3, 2), ctx(3)), "below-protected-accepted");
+  no(R.validateChange(ch("sun", "bench", "sets", 3, 4), ctx(3)), "sets-up-accepted");
+  // remove — only the Friday DB incline bench (protectedSets 0).
+  ok(R.validateChange(ch("fri", "inclinedb", "remove", false, true), ctx(3)), "remove-incline-rejected");
+  no(R.validateChange(ch("sun", "bench", "remove", false, true), ctx(3)), "remove-protected-accepted");
+  // reps — fixed targets only, at most two fewer.
+  ok(R.validateChange(ch("sun", "dipback", "reps", 6, 5), ctx(3)), "reps-cut-rejected");
+  no(R.validateChange(ch("sun", "dipback", "reps", 6, 3), ctx(3)), "reps-three-under-accepted");
+  no(R.validateChange(ch("sun", "curlhammer", "reps", 8, 7), ctx(3)), "reps-range-accepted");
+  // rir — easier only; never an RPE target.
+  ok(R.validateChange(ch("sun", "dipback", "rir", "2–3", "3–4"), ctx(3)), "rir-easier-rejected");
+  no(R.validateChange(ch("sun", "dipback", "rir", "2–3", "1–2"), ctx(3)), "rir-harder-accepted");
+  no(R.validateChange(ch("mon", "dl", "rir", "RPE 7–8 (2–3 RIR)", "3–4"), ctx(3)), "rir-on-rpe-accepted");
+  // rest — up only, priority lifts only, at most 3:00.
+  ok(R.validateChange(ch("wed", "ohptop", "rest", 150, 180), ctx(3)), "rest-up-rejected");
+  no(R.validateChange(ch("wed", "ohptop", "rest", 150, 120), ctx(3)), "rest-down-accepted");
+  no(R.validateChange(ch("wed", "ohptop", "rest", 150, 200), ctx(3)), "rest-over-3min-accepted");
+  no(R.validateChange(ch("fri", "squat", "rest", 180, 170), ctx(3)), "squat-rest-accepted");
+  no(R.validateChange(ch("sun", "row", "rest", 75, 90), ctx(3)), "accessory-rest-accepted");
+  // never — a target test, an impact card, week 13, an unknown field, a missing reversal condition.
+  const w12Test = SS[12].fri.items.find((i) => i.test);
+  no(R.validateChange(ch("fri", w12Test.id, "load", w12Test.load, w12Test.load - 2.5), ctx(12)), "test-item-accepted");
+  no(R.validateChange(ch("wed", "impact", "sets", 1, 1), ctx(3)), "impact-card-accepted");
+  no(R.validateChange(ch("wed", "ohptop", "load", 120, 117.5), ctx(13)), "week-13-accepted");
+  no(R.validateChange(ch("wed", "ohptop", "name", "a", "b"), ctx(3)), "unknown-field-accepted");
+  no(R.validateChange({ ...ch("wed", "ohptop", "load", 120, 117.5), reverseIf: "" }, ctx(3)), "missing-reverseIf-accepted");
+
+  // Rails: a cut taking normal-week triceps to 5, or press:pull above 1.30, is refused; a deload
+  // waives volume floors but never the two-set rule; the 75-minute tripwire holds.
+  const patch = (w, d, id, p) => ({ ...SS, [w]: { ...SS[w], [d]: { ...SS[w][d], items: SS[w][d].items.map((i) => (i.id === id ? { ...i, ...p } : i)) } } });
+  const tri = R.checkRails(3, patch(3, "mon", "pushdown", { sets: 2 }), SS);
+  if (tri.ok || !tri.failures.some((x) => /triceps/.test(x))) fail.push("rails-triceps-5-accepted");
+  const rat = R.checkRails(3, patch(3, "wed", "pullup", { sets: 2 }), SS);
+  if (rat.ok || !rat.failures.some((x) => /press:pull/.test(x))) fail.push("rails-ratio-accepted");
+  if (!R.checkRails(6, patch(6, "mon", "pushdown", { sets: 1 }), SS).failures.some((x) => /single set/.test(x))) fail.push("rails-single-set-in-deload");
+  if (R.checkRails(3, { ...SS, 3: { ...SS[3], sun: { ...SS[3].sun, secondsIfMaxRests: 4600 } } }, SS).ok) fail.push("rails-time-accepted");
+
+  // applyChanges never mutates the plan, skips a stale `from` and started days, and records `adjusted`.
+  const ap = R.applyChanges(SS, 3, [ch("wed", "ohptop", "load", 120, 117.5), ch("wed", "ohptop", "rest", 150, 180),
+    ch("fri", "inclinedb", "remove", false, true), ch("sun", "bench", "load", 999, 180)]);
+  const ohpE = ap.sessions[3].wed.items.find((i) => i.id === "ohptop");
+  if (ohpE.load !== 117.5 || ohpE.rest !== 180 || ohpE.adjusted.length !== 2) fail.push("apply-values");
+  if (SS[3].wed.items.find((i) => i.id === "ohptop").load !== 120) fail.push("apply-mutated-plan");
+  if (ap.sessions[3].fri.items.some((i) => i.id === "inclinedb") || !(ap.sessions[3].fri.removed || []).length) fail.push("apply-remove");
+  if (ap.applied.length !== 3 || ap.skipped.length !== 1 || !/plan changed/.test(ap.skipped[0].reason)) fail.push("apply-stale-from-not-skipped");
+  if (ap.sessions[2] !== SS[2]) fail.push("apply-touched-other-week");
+  const late = R.applyChanges(SS, 3, [ch("wed", "ohptop", "load", 120, 117.5), ch("fri", "inclinedb", "remove", false, true)], { skipDays: new Set(["wed"]) });
+  if (late.applied.length !== 1 || late.skipped[0].reason !== "day already started") fail.push("apply-late-days");
+  // Skipping the incline bench keeps the week legal (press 18, ratio 1.125).
+  const legal = R.checkRails(3, ap.sessions, SS);
+  if (!legal.ok) fail.push("rails-reject-legal-cut=" + legal.failures.join("; "));
+
+  // validateProposal — the whole file: schema, every change, then the rails.
+  const prop = (over = {}) => ({ schema: 1, program: M.programId, reviewedWeek: 2, forWeek: 3, createdAt: "2026-10-10T18:07:00Z",
+    status: "proposed", fatigueLevel: 1, fatigueEvidence: "One poor exposure.", findings: [{ kind: "observation", text: "x" }],
+    summary: "Hold the OHP top double.", alerts: [{ level: "stop", days: ["wed", "fri"], text: "x", rule: "§4" }],
+    changes: [ch("wed", "ohptop", "load", 120, 117.5)], holds: [], notes: [], check: { passed: true, failures: [] }, ...over });
+  ok(R.validateProposal(prop(), { sessions: SS }), "proposal-valid-rejected");
+  no(R.validateProposal(prop({ program: "astra-synthesis-v4" }), { sessions: SS }), "proposal-wrong-program-accepted");
+  no(R.validateProposal(prop({ status: "hold" }), { sessions: SS }), "hold-with-changes-accepted");
+  no(R.validateProposal(prop({ changes: [ch("wed", "ohptop", "load", 120, 117.5), ch("wed", "ohptop", "load", 120, 115)] }), { sessions: SS }), "duplicate-change-accepted");
+  no(R.validateProposal(prop({ findings: Array(6).fill({ kind: "observation", text: "x" }) }), { sessions: SS }), "six-findings-accepted");
+  no(R.validateProposal(prop({ notes: [{ day: "fri", id: "calfseat", text: "x".repeat(141) }] }), { sessions: SS }), "long-note-accepted");
+  no(R.validateProposal(prop(), { sessions: SS, expectedForWeek: 4 }), "wrong-forweek-accepted");
+  no(R.validateProposal(prop({ changes: [ch("mon", "pushdown", "sets", 3, 2)] }), { sessions: SS }), "proposal-floor-break-accepted");
+  ok(R.validateProposal(prop({ forWeek: 13, reviewedWeek: 12, status: "summary-only", changes: [] }), { sessions: SS }), "week13-summary-rejected");
+  no(R.validateProposal(prop({ forWeek: 13, reviewedWeek: 12 }), { sessions: SS }), "week13-changes-accepted");
+  ok(R.validateProposal({ schema: 1, program: M.programId, reviewedWeek: 2, forWeek: 3, createdAt: "x", status: "no-data", fatigueLevel: null,
+    summary: "No report reached the review.", findings: [], alerts: [], changes: [], holds: [], notes: [] }, { sessions: SS }), "no-data-rejected");
+
+  // Fetch merge: the same proposal is a no-op, a newer one replaces a WAITING one, a decided week is never replaced.
+  const pend = { 3: { proposal: prop(), status: "pending" } };
+  if (R.mergeProposals(pend, [prop()], "t") !== pend) fail.push("merge-same-not-noop");
+  if (R.mergeProposals(pend, [prop({ createdAt: "2026-10-10T19:00:00Z" })], "t")[3].proposal.createdAt !== "2026-10-10T19:00:00Z") fail.push("merge-newer-not-taken");
+  const dec = { 3: { proposal: prop(), status: "declined" } };
+  if (R.mergeProposals(dec, [prop({ createdAt: "later" })], "t") !== dec) fail.push("merge-replaced-decided");
+  if (R.isProposalFor(prop({ program: "astra-synthesis-v4" }), 3) || !R.isProposalFor(prop(), 3) || R.isProposalFor(prop(), 4)) fail.push("is-proposal-for");
+  // The effective table applies approved weeks only, and is the plan itself when nothing is approved.
+  const eff = R.buildEffective(SS, { 3: { status: "approved", applied: [ch("wed", "ohptop", "load", 120, 117.5)] },
+    4: { status: "declined", applied: [] }, 5: { status: "pending" } });
+  if (eff[3].wed.items.find((i) => i.id === "ohptop").load !== 117.5 || eff[4] !== SS[4] || eff[5] !== SS[5]) fail.push("build-effective");
+  if (R.buildEffective(SS, {}) !== SS) fail.push("build-effective-identity");
+}
+
+// 17) THE ROUTINE'S TOOLS — check-proposal.mjs against one valid and one failing fixture per rule,
+//     and week-context.mjs's ranges. Spawned exactly as the routine runs them (plain Node).
+{
+  const { spawnSync } = await import("node:child_process");
+  const run = (...args) => spawnSync(process.execPath, args, { encoding: "utf8" });
+  const FX = "tools/fixtures/";
+  const pass = run("tools/check-proposal.mjs", FX + "valid.json", FX + "report-w2.json");
+  if (pass.status !== 0 || !pass.stdout.startsWith("PASS")) fail.push("checker-valid-failed=" + (pass.stdout + pass.stderr).slice(0, 300));
+  for (const f of ["fail-load-above", "fail-load-floor", "fail-dlback-step", "fail-sets-protected", "fail-single-set",
+                   "fail-remove-protected", "fail-rest-down", "fail-rest-squat", "fail-rir-harder", "fail-test-item",
+                   "fail-impact-card", "fail-triceps-floor", "fail-wrong-forweek", "fail-malformed"]) {
+    const r = f === "fail-test-item" ? run("tools/check-proposal.mjs", FX + f + ".json")
+                                     : run("tools/check-proposal.mjs", FX + f + ".json", FX + "report-w2.json");
+    if (r.status !== 1 || !r.stdout.startsWith("FAIL")) fail.push(`checker-accepted:${f}=${r.status}`);
+  }
+  const wc = run("tools/week-context.mjs", "3", FX + "report-w2.json");
+  if (wc.status !== 0) fail.push("week-context-exit=" + wc.status + wc.stderr.slice(0, 200));
+  // Last week's 117.5 is offered for the OHP top double; deadlift back-offs step by 10.
+  if (!/ohptop[^\n]*117\.5/.test(wc.stdout) || !/dlback[^\n]*395/.test(wc.stdout)) fail.push("week-context-ranges");
+  if (!/TARGET TEST/.test(run("tools/week-context.mjs", "12").stdout)) fail.push("week-context-tests");
+  if (!/summary-only/.test(run("tools/week-context.mjs", "13").stdout)) fail.push("week-context-13");
+}
+
+/* Shared by blocks 18–19: a week-3 proposal (hold the OHP top double at 117.5 with a longer rest,
+   lighter Friday dips), a bundle that opens on week 3 Wednesday holding it, and a fresh booted copy. */
+const rvChange = (day, id, field, from, to, why) => ({ day, id, field, from, to, why, rule: "§3 level 1", reverseIf: "Next Wednesday's first set lands at 2–3 RIR." });
+const rvProposal = (over = {}) => ({
+  schema: 1, program: "astra-synthesis-v5", reviewedWeek: 2, forWeek: 3, createdAt: "2026-10-10T18:07:00Z", basedOn: {},
+  status: "proposed", fatigueLevel: 1, fatigueEvidence: "One poor exposure: Wednesday's OHP top double.",
+  findings: [{ kind: "observation", text: "Wed OHP top double at 117.5: first set 1 RIR against 2–3." }],
+  summary: "Hold the OHP top double at 117.5 and rest toward 3:00.",
+  alerts: [{ level: "stop", days: ["wed", "fri"], text: "Calf soreness two mornings running — start impact at the lower pogo dose.", rule: "§4" }],
+  changes: [rvChange("wed", "ohptop", "load", 120, 117.5, "The first set came in 1 RIR harder than prescribed."),
+            rvChange("wed", "ohptop", "rest", 150, 180, "Rest toward 3:00 after one poor exposure."),
+            rvChange("fri", "dip", "load", 32.5, 30, "Friday dips slowed on the last set.")],
+  holds: [{ day: "fri", id: "squat", why: "Last exposure was 2 RIR; squat increases need 3.", rule: "§2" }],
+  notes: [{ day: "fri", id: "calfseat", text: "Every set reached 20 — add the smallest load step.", rule: "§5" },
+          { day: "wed", id: "session", text: "Keep Wednesday impact at the lower pogo dose.", rule: "§4" }],
+  check: { passed: true, failures: [] }, ...over });
+const rvSeed = (extra = {}) => JSON.stringify({ program: "astra-synthesis-v5", version: 17, week: 3, day: "wed", logs: {}, settings: {},
+  reviews: { 3: { proposal: rvProposal(), status: "pending", fetchedAt: "2026-10-10T19:00:00Z" } }, ...extra });
+const rvBoot = async ({ bundle, syncCfg, gh } = {}) => {
+  const d = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true, runScripts: "dangerously",
+    beforeParse(w) {
+      w.fetch = gh ? gh.fetchImpl : undefined;
+      if (bundle) w.localStorage.setItem("pp-tracker-v3", bundle);
+      if (syncCfg) w.localStorage.setItem("pp-sync-v1", JSON.stringify(syncCfg));
+    } });
+  await new Promise((r) => setTimeout(r, 1400));
+  return d;
+};
+const rvBtn = (docX, t) => [...docX.querySelectorAll("button")].find((b) => b.textContent.trim() === t);
+const rvTab = (docX, n) => [...docX.querySelectorAll(".tab")].find((b) => b.textContent.includes(n));
+const rvStored = (wX) => JSON.parse(wX.localStorage.getItem("pp-tracker-v3") || "{}");
+const rvType = (wX, el, v) => {
+  Object.getOwnPropertyDescriptor(wX.HTMLInputElement.prototype, "value").set.call(el, v);
+  el.dispatchEvent(new wX.Event("input", { bubbles: true }));
+};
+// Only what is PINNED to the day on screen — the card at the top lists every alert on every day.
+const rvPins = (docX) => [...docX.querySelectorAll(".revpin, .session > div > .revline")].map((e) => e.textContent).join(" ");
+const rvWeight = (docX, exId) => docX.querySelector(`.card[data-exid="${exId}"] input[aria-label$="set 1 weight"]`);
+
+// 18) SATURDAY REVIEW IN THE APP, READ-ONLY (Phase 2) — the card, pinned alerts and notes, the
+//     suggestion lines, Settings history, and fetching from the private repo.
+{
+  { const d = await rvBoot({ bundle: rvSeed() }); const wR = d.window, docR = wR.document;
+    const card = docR.querySelector(".reviewcard");
+    if (!card || !card.textContent.includes("plan for week 3") || !card.textContent.includes("Fatigue level 1")) fail.push("review-card-missing");
+    else if (!card.textContent.includes("117.5 lb instead of 120") || !card.textContent.includes("Reverse if")) fail.push("review-card-changes");
+    if (rvBtn(docR, "Approve")) fail.push("review-approve-shown-while-off");
+    const ohp = docR.querySelector('.card[data-exid="ohptop"]');
+    if (!ohp || !ohp.textContent.includes("Saturday review suggests") || !ohp.textContent.includes("117.5 lb instead of 120")) fail.push("review-suggestion-line");
+    if (rvWeight(docR, "ohptop")?.placeholder !== "120") fail.push("review-changed-plan-while-off");
+    const sessW = rvPins(docR);
+    if (!sessW.includes("Calf soreness two mornings running") || !sessW.includes("Keep Wednesday impact at the lower pogo dose")) fail.push("review-wed-pins");
+    rvTab(docR, "FRI").click(); await wait(200);
+    if (!rvPins(docR).includes("Calf soreness two mornings running")) fail.push("review-fri-alert");
+    if (!docR.querySelector('.card[data-exid="calfseat"] .revline')?.textContent.includes("add the smallest load step")) fail.push("review-exercise-note");
+    rvTab(docR, "SUN").click(); await wait(200);
+    if (rvPins(docR).includes("Calf soreness two mornings running")) fail.push("review-alert-on-wrong-day");
+    [...docR.querySelectorAll(".tool")].find((b) => b.textContent.includes("Settings")).click(); await wait(150);
+    const st = docR.querySelector(".settings").textContent;
+    if (!/Week 3 · 3 changes/.test(st) || !st.includes("waiting")) fail.push("review-settings-history");
+    d.window.close(); }
+
+  // [ADDED] audit gap 3 — every status renders: no data, summary only (with the checker's reasons), hold.
+  { const nd = rvProposal({ status: "no-data", fatigueLevel: null, fatigueEvidence: "", findings: [], alerts: [], changes: [], holds: [], notes: [], summary: "No report." });
+    const so = rvProposal({ status: "summary-only", changes: [], check: { passed: false, failures: ["change 1: wed ohptop load: 125 is above the plan's 120"] } });
+    const ho = rvProposal({ status: "hold", changes: [], forWeek: 4, reviewedWeek: 3 });
+    const d = await rvBoot({ bundle: rvSeed({ reviews: { 3: { proposal: nd, status: "pending" }, 4: { proposal: ho, status: "pending" } } }) }); const docR = d.window.document;
+    const txt = [...docR.querySelectorAll(".reviewcard")].map((c) => c.textContent).join(" | ");
+    if (!txt.includes("No week report reached the review") || !/no data/i.test(txt)) fail.push("status-no-data");
+    if (!/plan for week 4/.test(txt) || !/hold/i.test(txt)) fail.push("status-hold");
+    d.window.close();
+    const d2 = await rvBoot({ bundle: rvSeed({ reviews: { 3: { proposal: so, status: "pending" } } }) });
+    if (!d2.window.document.querySelector(".reviewcard")?.textContent.includes("rules check failed")) fail.push("status-summary-only");
+    d2.window.close(); }
+
+  // Fetching: the phone picks up this calendar week's proposal, ignores another program's, and
+  // never replaces a week that is already decided. (Weeks come from today's date, like the app.)
+  { const S = await import("./src/sync.js");
+    const cw = S.calendarWeek(new Date(), "2026-09-27", 12);
+    const holdFor = (w, over = {}) => rvProposal({ forWeek: w, reviewedWeek: w - 1, status: "hold", changes: [], ...over });
+    const repo = { [S.proposalPath(cw)]: { text: JSON.stringify(holdFor(cw)), sha: "p1" } };
+    if (cw + 1 <= 12) repo[S.proposalPath(cw + 1)] = { text: JSON.stringify(holdFor(cw + 1, { program: "astra-synthesis-v4" })), sha: "p2" };
+    const gh = fakeGitHub(repo);
+    const base = { program: "astra-synthesis-v5", version: 17, week: cw, day: "sun", logs: {}, settings: {} };
+    const d = await rvBoot({ bundle: JSON.stringify(base), syncCfg: { token: "github_pat_REVIEW_TEST" }, gh });
+    await wait(1200);
+    const rv = rvStored(d.window).reviews || {};
+    if (!rv[cw] || rv[cw].status !== "pending" || rv[cw].proposal.status !== "hold") fail.push("review-fetch-missed");
+    if (rv[cw + 1]) fail.push("review-fetch-took-wrong-program");
+    if (!gh.calls.some((c) => c.method === "GET" && c.path === S.proposalPath(cw))) fail.push("review-fetch-no-request");
+    d.window.close();
+    const gh2 = fakeGitHub({ [S.proposalPath(cw)]: { text: JSON.stringify(holdFor(cw, { createdAt: "2026-10-11T09:00:00Z" })), sha: "p3" } });
+    const d2 = await rvBoot({ bundle: JSON.stringify({ ...base, reviews: { [cw]: { proposal: holdFor(cw), status: "declined",
+      decidedAt: "2026-10-10T20:00:00Z", applied: [], skipped: [] } } }), syncCfg: { token: "github_pat_REVIEW_TEST" }, gh: gh2 });
+    await wait(1200);
+    const rv2 = rvStored(d2.window).reviews || {};
+    if (rv2[cw]?.status !== "declined" || rv2[cw]?.proposal.createdAt !== "2026-10-10T18:07:00Z") fail.push("review-fetch-replaced-decided");
+    d2.window.close(); }
+}
+
+// 19) ONE-TAP APPROVE (Phase 3, behind the Settings switch) — the effective table reaches the set
+//     grid, Rx and rest; Undo; Decline keeps the advisories; late approval; the phone's own re-check;
+//     the one-time prompt; report v18; the week strip; and the migration archiving `reviews`.
+{
+  const on = (extra = {}) => rvSeed({ settings: { approveEnabled: true }, ...extra });
+
+  // a) Approve: placeholder, rest, chip, Rx fill all follow; suggestion lines go; the decision syncs.
+  { const gh = fakeGitHub();
+    const d = await rvBoot({ bundle: on(), syncCfg: { token: "github_pat_REVIEW_TEST" }, gh }); const w3 = d.window, doc3 = w3.document;
+    const ap = rvBtn(doc3, "Approve");
+    if (!ap) fail.push("approve-missing-when-on");
+    else {
+      ap.click(); await wait(300);
+      const ohp = doc3.querySelector('.card[data-exid="ohptop"]');
+      if (rvWeight(doc3, "ohptop").placeholder !== "117.5") fail.push("approve-placeholder=" + rvWeight(doc3, "ohptop").placeholder);
+      if (!ohp.textContent.includes("Rest 3:00")) fail.push("approve-rest");
+      if (ohp.textContent.includes("Saturday review suggests")) fail.push("approve-left-suggestion");
+      const chip = ohp.querySelector(".adj-tag");
+      if (!chip) fail.push("approve-no-chip");
+      else { chip.click(); await wait(80); if (!doc3.querySelector('.card[data-exid="ohptop"]').textContent.includes("Reverse if")) fail.push("approve-chip-panel"); }
+      doc3.querySelector('.card[data-exid="ohptop"] button[aria-label="Fill prescribed"]').click(); await wait(80);
+      if (rvWeight(doc3, "ohptop").value !== "117.5") fail.push("approve-rx-fill");
+      await wait(1000);
+      const r3 = rvStored(w3).reviews[3];
+      if (r3.status !== "approved" || r3.applied.length !== 3) fail.push("approve-stored=" + r3.status + "/" + (r3.applied || []).length);
+      if (!(gh.repo["data/bundle.json"]?.text || "").includes('"status":"approved"')) fail.push("approve-not-synced");
+    }
+    d.window.close(); }
+
+  // b) Undo returns to waiting; c) Decline keeps the plan, the stop alert and the session note;
+  //    Undo disappears once a set of the week is logged.
+  { const d = await rvBoot({ bundle: on() }); const doc3 = d.window.document;
+    rvBtn(doc3, "Approve").click(); await wait(200);
+    rvBtn(doc3, "Undo").click(); await wait(200);
+    if (rvWeight(doc3, "ohptop").placeholder !== "120") fail.push("undo-kept-change");
+    if (!rvBtn(doc3, "Approve")) fail.push("undo-no-approve");
+    rvBtn(doc3, "Decline").click(); await wait(200);
+    const s = doc3.querySelector(".session").textContent, pinned = rvPins(doc3);
+    if (!pinned.includes("Calf soreness two mornings running") || !pinned.includes("Keep Wednesday impact")) fail.push("decline-hid-advisories");
+    if (s.includes("Saturday review suggests")) fail.push("decline-left-suggestions");
+    if (rvWeight(doc3, "ohptop").placeholder !== "120") fail.push("decline-changed-plan");
+    rvType(d.window, rvWeight(doc3, "ohptop"), "115"); await wait(150);
+    if (rvBtn(doc3, "Undo")) fail.push("undo-after-logging");
+    d.window.close(); }
+
+  // d) Late approval: Wednesday has started, so only Friday's change applies.
+  { const d = await rvBoot({ bundle: on({ logs: { 3: { wed: { scoop: [{ w: "20", r: "3" }] } } } }) }); const doc3 = d.window.document;
+    if (!doc3.querySelector(".reviewcard").textContent.includes("Some days have started")) fail.push("late-no-warning");
+    rvBtn(doc3, "Approve").click(); await wait(1000);
+    const r3 = rvStored(d.window).reviews[3];
+    if ((r3.applied || []).length !== 1 || r3.applied[0].id !== "dip" || (r3.skipped || []).length !== 2) fail.push("late-approval=" + JSON.stringify((r3.applied || []).map((c) => c.id)));
+    if (rvWeight(doc3, "ohptop").placeholder !== "120") fail.push("late-changed-started-day");
+    d.window.close(); }
+
+  // e) The phone never trusts the file: a load above the plan disables Approve and says why.
+  { const bad = rvProposal({ changes: [rvChange("wed", "ohptop", "load", 120, 125, "x")] });
+    const d = await rvBoot({ bundle: on({ reviews: { 3: { proposal: bad, status: "pending" } } }) }); const doc3 = d.window.document;
+    const ap = rvBtn(doc3, "Approve");
+    if (!ap || !ap.disabled || !doc3.querySelector(".reviewcard").textContent.includes("own check failed")) fail.push("recheck-not-enforced");
+    d.window.close(); }
+
+  // f) The one-time prompt: the first entry of a waiting week logs nothing and offers the review;
+  //    "Log anyway" lets the next entry through, and the prompt never returns.
+  { const d = await rvBoot({ bundle: on() }); const w3 = d.window, doc3 = w3.document;
+    rvType(w3, rvWeight(doc3, "ohptop"), "120"); await wait(150);
+    if (!doc3.querySelector(".revprompt")) fail.push("prompt-missing");
+    if (rvWeight(doc3, "ohptop").value !== "") fail.push("prompt-logged-anyway");
+    rvBtn(doc3, "Log anyway").click(); await wait(100);
+    rvType(w3, rvWeight(doc3, "ohptop"), "120"); await wait(150);
+    if (rvWeight(doc3, "ohptop").value !== "120" || doc3.querySelector(".revprompt")) fail.push("prompt-blocked-second-entry");
+    await wait(900);
+    if (!rvStored(w3).reviews[3].prompted) fail.push("prompt-not-remembered");
+    d.window.close(); }
+
+  // g) Report v18 after Approve: effective values, `adjusted`, performedLoad in rows and history.
+  { let clip = null;
+    const d = await rvBoot({ bundle: on({ logs: { 2: { wed: { ohptop: [{ w: "117.5", r: "2", rir: "1" }] } } } }) }); const w3 = d.window, doc3 = w3.document;
+    Object.defineProperty(w3.navigator, "clipboard", { value: { writeText: async (t) => { clip = t; } }, configurable: true });
+    rvBtn(doc3, "Approve").click(); await wait(200);
+    [...doc3.querySelectorAll(".tool")].find((b) => b.textContent.includes("AI Analysis")).click(); await wait(150);
+    try {
+      const j = JSON.parse(clip);
+      const row = j.days.find((x) => x.day === "wed").exercises.find((e) => e.id === "ohptop");
+      if (j.version !== 18 || row.rx.load !== 117.5 || !row.adjusted || row.adjusted[0].field !== "load" || !("performedLoad" in row)) fail.push("report-v18-row");
+      if (j.history["wed-ohptop"]?.[0]?.performedLoad !== 117.5) fail.push("report-v18-history");
+      if (j.review?.status !== "approved") fail.push("report-v18-review");
+    } catch (e) { fail.push("report-v18-parse"); }
+    d.window.close(); }
+
+  // h) Skipping the Friday incline bench: the week strip drops to 34 and Friday says why.
+  { const rm = rvProposal({ changes: [{ day: "fri", id: "inclinedb", field: "remove", from: false, to: true, why: "Shoulder felt pinchy.", rule: "§5", reverseIf: "Two clean Fridays." }] });
+    const d = await rvBoot({ bundle: on({ reviews: { 3: { proposal: rm, status: "pending" } } }) }); const doc3 = d.window.document;
+    rvBtn(doc3, "Approve").click(); await wait(200);
+    const col = [...doc3.querySelectorAll(".wave-col")][2];
+    if (!/Week 3, 34 compound work sets/.test(col.getAttribute("aria-label") || "")) fail.push("strip-not-effective=" + col.getAttribute("aria-label"));
+    rvTab(doc3, "FRI").click(); await wait(200);
+    if (doc3.querySelector('.card[data-exid="inclinedb"]') || !doc3.querySelector(".session").textContent.includes("Skipped by the Saturday review")) fail.push("remove-not-shown");
+    d.window.close(); }
+
+  // i) The program-collision migration archives `reviews` with the rest of the old block.
+  { const old = JSON.stringify({ program: "astra-synthesis-v4", version: 17, week: 3, logs: { 1: { sun: { bench: [{ w: "180", r: "3" }] } } }, settings: {},
+      reviews: { 3: { proposal: rvProposal(), status: "approved", applied: [] } } });
+    const d = await rvBoot({ bundle: old }); await wait(800);
+    const s = rvStored(d.window), arch = s.archived || [];
+    if (!arch.length || !arch[arch.length - 1].reviews?.[3] || Object.keys(s.reviews || {}).length) fail.push("migration-reviews");
+    d.window.close(); }
+
+  // k) [ADDED] audit gap 1 — a change whose `from` no longer matches the plan is skipped and listed;
+  //    the rest still apply (spec §7.3), instead of the whole review being refused.
+  { const st = rvProposal({ changes: [rvChange("wed", "ohptop", "load", 122.5, 120, "x"), rvChange("fri", "dip", "load", 32.5, 30, "x")] });
+    const d = await rvBoot({ bundle: on({ reviews: { 3: { proposal: st, status: "pending" } } }) }); const doc3 = d.window.document;
+    const ap = rvBtn(doc3, "Approve");
+    if (!ap || ap.disabled || !doc3.querySelector(".reviewcard").textContent.includes("no longer matches")) fail.push("stale-blocked-approve");
+    else {
+      ap.click(); await wait(1000);
+      const r3 = rvStored(d.window).reviews[3];
+      if ((r3.applied || []).length !== 1 || (r3.skipped || [])[0]?.reason !== "the plan changed since the review") fail.push("stale-not-skipped=" + JSON.stringify(r3.skipped));
+    }
+    d.window.close(); }
+
+  // j) The switch: off by default; turning it on in Settings shows Approve on the card.
+  { const d = await rvBoot({ bundle: rvSeed() }); const doc3 = d.window.document;
+    [...doc3.querySelectorAll(".tool")].find((b) => b.textContent.includes("Settings")).click(); await wait(150);
+    const pill = doc3.querySelector('button[aria-label="One-tap Approve"]');
+    if (!pill || pill.getAttribute("aria-pressed") !== "false") fail.push("switch-not-off-by-default");
+    else { pill.click(); await wait(900); if (!rvStored(d.window).settings?.approveEnabled || !rvBtn(doc3, "Approve")) fail.push("switch-not-working"); }
+    d.window.close(); }
 }
 
 if (fail.length) { console.error("FAIL: " + fail.join(", ")); process.exit(1); }

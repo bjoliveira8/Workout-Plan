@@ -90,6 +90,7 @@ everything, archives included, across devices.
 - `src/program.js` — generated prescriptions; the single edit point for every load
 - `src/entry.jsx` — mount + localStorage shim for the `window.storage` API
 - `src/sync.js` — cloud sync to the private `Workout-Data` repo (see the setup guide below)
+- `src/review.js` — the Saturday-review rules shared by the app and the routine's tools (`tools/week-context.mjs`, `tools/check-proposal.mjs`)
 - `tools/gen-program.mjs` — one-shot generator: source plan JSON → `src/program.js`
 - `tools/gen-block-doc.mjs` — one-shot generator for the program document, with a cross-check
   that refuses to publish if the document and the data disagree
@@ -113,3 +114,15 @@ everything, archives included, across devices.
 
 If the line ever says "Key expired", repeat steps 2–3. If it says "Sync paused", the cloud copy
 holds more training than the phone: tap **Restore from cloud** unless you know the phone is right.
+
+## Saturday review
+
+Every Saturday at 14:07 a Claude routine reviews the week you trained and writes a proposal for
+next week. Open the tracker: a **Saturday review** card sits at the top. Safety alerts and coaching
+notes are pinned to the days and exercises they belong to, and stay there whatever you decide.
+Suggested changes show on each exercise card.
+
+**One-tap Approve is off** until a few reviews have looked right (Settings → One-tap Approve).
+When it's on, **Approve** applies the changes to that week only (days you've already started stay
+as planned), **Decline** keeps the plan, and **Undo** works until you log the week's first set.
+If a Saturday passes with no review, Settings says so — use AI Analysis by hand that week.

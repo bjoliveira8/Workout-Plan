@@ -1,0 +1,28 @@
+{
+  "week": 2,
+  "days": [
+    {
+      "day": "mon",
+      "exercises": [
+        {
+          "id": "dlback",
+          "performedLoad": 405
+        }
+      ]
+    },
+    {
+      "day": "wed",
+      "exercises": [
+        {
+          "id": "ohptop",
+          "performedLoad": 117.5
+        },
+        {
+          "id": "ohpback",
+          "performedLoad": 112.5
+        }
+      ]
+    }
+  ],
+  "history": {}
+}

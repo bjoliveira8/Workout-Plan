@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { SESSIONS, IMPACT, AUDIT, META, WEEK13, SOURCE } from "./program.js";
 import { SYNC_KEY, BUNDLE_PATH, EMPTY_SYNC, PRIORITY_DELAY_MS, HIDDEN_THROTTLE_MS, normalizeConfig, reportPath,
-         calendarWeek, countLoggedSets, runSync, createQueue, ghGet, syncStatus, needsAttention, expiryText } from "./sync.js";
+         calendarWeek, countLoggedSets, runSync, createQueue, ghGet, syncStatus, needsAttention, expiryText, proposalPath, PROPOSAL_REFETCH_MS } from "./sync.js";
+import { RIR_FLOOR, rirTarget, performedLoad, lastPerformedFromLogs, validateProposal, applyChanges, buildEffective,
+         mergeProposals, isProposalFor, plannedValue } from "./review.js";
 
 /* ═══════════ PROGRAM DATA — Astra Synthesized Concurrent Block v5.0-syn3 ═══════════
    Source of truth: docs/12-week-concurrent-block-v5.md, generated into src/program.js
@@ -80,23 +82,15 @@ const PHASE = (w) => (w === 1 ? "Accumulation start" : w === 6 ? "Deload" : w ==
                     : w <= 5 ? "Accumulation" : "Intensification");
 
 /* Week-strip bar height = that week's compound work sets (press + vertical + horizontal).
-   Derived, never asserted: 36 in normal weeks, 23 in week 6, 15 in week 12. */
-const WEEK_LOAD = (w) => { const a = AUDIT[w]; return a ? a.press + a.vertical + a.horizontal : 0; };
+   Derived, never asserted: 36 in normal weeks, 23 in week 6, 15 in week 12 — read from the
+   EFFECTIVE table (weekVolume → sessionFor), so an approved cut shows in the strip (spec §7.5). */
+const WEEK_LOAD = (w) => { const v = weekVolume(w); return v.press + v.vpull + v.hpull; };
 
-/* Reserve floor. C08 sets the success standard at >= 2 RIR, aiming for 2; the deload and
-   test weeks hold everything at 4 or easier. A set below the floor is flagged. */
-const RIR_FLOOR = (w) => (REDUCED.has(w) ? 4 : 2);
+/* The reserve floor (RIR_FLOOR: 2 normally, 4 in weeks 6 and 12, per C08 — a set below it is
+   flagged) and each prescription's OWN reserve (rirTarget: "2–3", "3+", "≥2; aim 2"; none for
+   an RPE effort target, which never warns) now live in src/review.js, imported above, so the
+   Saturday routine's checker judges reserve with exactly the same code. */
 const TARGET_RIR = (w) => (REDUCED.has(w) ? "4+" : "2–3");
-
-/* Each prescription carries its OWN reserve ("2–3", "3+", "≥2; aim 2"), which is what the
-   set row shows and judges against — the week floor is only the fallback. An RPE target
-   ("RPE ≤4; fast intent") is an effort instruction, not a reserve, so it gets no numeric
-   floor and never warns: the power work is deliberately far from failure. */
-const rirTarget = (rirText) => {
-  if (!rirText || /RPE/i.test(rirText)) return null;
-  const m = String(rirText).match(/\d+(?:\.\d+)?/);
-  return m ? parseFloat(m[0]) : null;
-};
 
 const CUT_LABEL = { never:"never-cut", second:"cut-2nd", first:"cut-1st" };
 const WEEKDAYS = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -133,9 +127,14 @@ const w13TestFor = (exId) => WEEK13.tests.find(t => t.id === exId) || null;
    one target per set — because renderSetRow fills placeholders and the Rx button from it. */
 const fmtLb = (n) => (n == null ? "" : String(Math.round(n * 10) / 10));
 
+/* The EFFECTIVE session table — the plan with every approved Saturday-review change applied
+   (spec §7.5). The component republishes it on every render (a pure function of the saved
+   `reviews`), and this is the app's ONLY read of SESSIONS, so the set grid, Rx button,
+   placeholders, rest timer, volume audit, week strip and report all follow it. */
+let effectiveSessions = SESSIONS;
 function sessionFor(week, dayId) {
   if (week === W13_WEEK) return null;       // week 13 has its own screen
-  return SESSIONS[week]?.[dayId] || null;
+  return effectiveSessions[week]?.[dayId] || null;
 }
 
 /* Exercise list for a session, with the synthetic cards the plan implies but does not
@@ -246,6 +245,17 @@ const FLOORS = META.floors;
 const ytUrl = (name) => "https://www.youtube.com/results?search_query=" + encodeURIComponent("how to " + name + " form guide") + "&sp=EgIYAQ%253D%253D";
 const e1rm = (w, r) => Math.round(w * (1 + r/30));
 const fmtTime = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+/* One proposed change in plain words: "117.5 lb instead of 120", "rest 3:00 instead of 2:30". */
+const changeText = (c) =>
+  c.field === "load" ? `${fmtLb(c.to)} lb instead of ${fmtLb(c.from)}`
+  : c.field === "sets" ? `${c.to} sets instead of ${c.from}`
+  : c.field === "reps" ? `${c.to} reps instead of ${c.from}`
+  : c.field === "rir" ? `reserve ${c.to} instead of ${c.from}`
+  : c.field === "rest" ? `rest ${fmtTime(c.to)} instead of ${fmtTime(c.from)}`
+  : c.field === "remove" ? "skip this exercise this week"
+  : `${c.field}: ${c.from} → ${c.to}`;
+// What Brian sees for a review's decision state.
+const REVIEW_STATUS = { pending: "waiting", approved: "approved", declined: "declined" };
 
 /* ═══════════ THEMES ═══════════ */
 const THEMES = {
@@ -295,7 +305,7 @@ function playTone(ctx, tone) {
 /* Older saves held a single archived object; this block keeps a list of them. */
 const asArchiveList = (a) => (Array.isArray(a) ? a : a ? [a] : []);
 
-const DEFAULT_SETTINGS = { theme:"iron", tone:"radar", vibrate:true, autoRest:true,
+const DEFAULT_SETTINGS = { theme:"iron", tone:"radar", vibrate:true, autoRest:true, approveEnabled:false,
   planName: META.planName, dayMap:{ sun:0, mon:1, wed:3, fri:5 } };
 
 /* ═══════════ TIMER BAR — owns its own tick, so the rest of the app never re-renders during a countdown ═══════════ */
@@ -381,6 +391,14 @@ export default function ConcurrentBlockTracker() {
   const latest = useRef(null);             // latest file builder, refreshed after every render
   const priorityDirty = useRef(false);     // a tissue check or note changed since the last good sync
   const priorityTimer = useRef(null);
+  /* Saturday review (spec §7) — proposals arrive from the private repo and live in the bundle */
+  const [reviews, setReviews] = useState({});             // { [forWeek]: { proposal, status, decidedAt, applied, skipped, prompted } }
+  const [reviewPrompt, setReviewPrompt] = useState(null); // week whose one-time "look at it first?" prompt is showing
+  const [adjOpen, setAdjOpen] = useState({});             // { "week-day-exId": true } — an adjusted chip expanded
+  const lastProposalFetch = useRef(0);
+  // Publish the effective table BEFORE anything below reads a session (see sessionFor).
+  const effective = useMemo(() => buildEffective(SESSIONS, reviews), [reviews]);
+  effectiveSessions = effective;
 
   const T = THEMES[settings.theme] || THEMES.iron;
   const themeStyle = Object.fromEntries(Object.entries(T.v).map(([k,v]) => ["--" + k, v]));
@@ -413,7 +431,7 @@ export default function ConcurrentBlockTracker() {
               sessDone: d.sessDone || {}, tested: d.tested || {}, order: d.order || {},
               barSpeed: d.barSpeed || {}, sessionTime: d.sessionTime || {},
               elastic: d.elastic || {}, elasticQ: d.elasticQ || {}, sprintLog: d.sprintLog || {},
-              powerQual: d.powerQual || {}, addCheck: d.addCheck || {},
+              powerQual: d.powerQual || {}, addCheck: d.addCheck || {}, reviews: d.reviews || {},
             }] : prior);
             const st = { ...DEFAULT_SETTINGS };
             ["theme", "tone", "vibrate", "autoRest"].forEach(k => {
@@ -439,6 +457,7 @@ export default function ConcurrentBlockTracker() {
           setOrder(d.order || {}); setBarSpeed(d.barSpeed || {}); setSessionTime(d.sessionTime || {});
           setElastic(d.elastic || {}); setElasticQ(d.elasticQ || {}); setSprintLog(d.sprintLog || {});
           setPowerQual(d.powerQual || {}); setAddCheck(d.addCheck || {});
+          setReviews(d.reviews || {});
           const st = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
           if (!TONES[st.tone]) st.tone = "radar";
           setSettings(st);
@@ -463,12 +482,12 @@ export default function ConcurrentBlockTracker() {
     if (!loaded.current) return;
     setStatus("saving");
     clearTimeout(saveTimer.current);
-    const bundle = { program: PROGRAM_ID, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck, archived };
+    const bundle = { program: PROGRAM_ID, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck, reviews, archived };
     saveTimer.current = setTimeout(async () => {
       try { await window.storage.set("pp-tracker-v3", JSON.stringify(bundle)); setStatus("saved"); }
       catch (e) { setStatus("error"); }
     }, 700);
-  }, [week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck, archived]);
+  }, [week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck, reviews, archived]);
   /* load the sync config once — a separate key, so a missing or broken one never touches training data */
   useEffect(() => {
     (async () => {
@@ -534,6 +553,15 @@ export default function ConcurrentBlockTracker() {
   const setEntry = (exId, i, fields, maybeVal) => {
     if (typeof fields === "string") fields = { [fields]: maybeVal };
     const vals = Object.values(fields);
+    // Phase 3: the FIRST entry of a week whose review still waits for Approve offers the review
+    // first — once — and logs nothing yet, because a started day is left as planned (spec §7.5).
+    const rv = reviews[week];
+    if (settings.approveEnabled && rv && rv.proposal && rv.status === "pending" && rv.proposal.status === "proposed"
+        && (rv.proposal.changes || []).length && !rv.prompted && vals.some(v => v !== "") && !startedDays(week).length) {
+      setReviews(p => ({ ...p, [week]: { ...p[week], prompted: true } }));
+      setReviewPrompt(week);
+      return false;
+    }
     // Start the global session clock on the first value logged this session.
     if (vals.some(v => v !== "") && !sessionTime[`${week}-${day}`]) {
       setSessionTime(p => (p[`${week}-${day}`] ? p : { ...p, [`${week}-${day}`]: { start: Date.now(), end: null } }));
@@ -602,8 +630,9 @@ export default function ConcurrentBlockTracker() {
       document.body.removeChild(ta);
     }
   };
-  // The full backup object — Copy backup and cloud sync both send exactly this (version 16).
-  const backupObject = () => ({ app:"concurrent-block", program:PROGRAM_ID, version:16, exported:new Date().toISOString(), archived, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck });
+  // The full backup object — Copy backup and cloud sync both send exactly this. Version 17 adds
+  // `reviews` (the Saturday proposals and Brian's decisions — the routine reads decisions here).
+  const backupObject = () => ({ app:"concurrent-block", program:PROGRAM_ID, version:17, exported:new Date().toISOString(), archived, week, day, logs, extraSets, notes, exNotes, altChoice, done, sessDone, tested, settings, order, barSpeed, sessionTime, elastic, elasticQ, sprintLog, powerQual, addCheck, reviews });
   const exportBackup = () => copyText(JSON.stringify(backupObject()), "Backup JSON copied — keep it somewhere safe");
   // Replace the phone's training data with backup `d` — shared by paste-restore and Restore from cloud.
   const applyBackup = (d) => {
@@ -618,6 +647,7 @@ export default function ConcurrentBlockTracker() {
     setOrder(d.order||{}); setBarSpeed(d.barSpeed||{}); setSessionTime(d.sessionTime||{});
     setElastic(d.elastic||{}); setElasticQ(d.elasticQ||{}); setSprintLog(d.sprintLog||{});
     setPowerQual(d.powerQual||{}); setAddCheck(d.addCheck||{}); setArchived(asArchiveList(d.archived));
+    setReviews(d.reviews||{});
     if (d.settings) { const st = { ...DEFAULT_SETTINGS, ...d.settings }; if (!TONES[st.tone]) st.tone = "radar"; setSettings(st); }
   };
   const restoreBackup = () => {
@@ -722,6 +752,7 @@ export default function ConcurrentBlockTracker() {
           ceilingOk: run.accelM <= RUN_CEILING.accelM && run.totalM <= RUN_CEILING.totalM,
         } : null,
         adductorCheck: addCheck[`${w}-${d.id}`] || null,
+        removedByReview: (ses.removed || []).map(it => it.id),
         exercises: ses.items.map(it => {
           const key = `${w}-${d.id}-${it.id}`;
           const actual = (logs?.[w]?.[d.id]?.[it.id] || [])
@@ -735,11 +766,13 @@ export default function ConcurrentBlockTracker() {
             rx: { sets: it.sets, reps: it.reps, repsMax: it.repsMax, load: it.load, loadGuidance: it.loadText,
                   external: !!it.system, systemLoad: it.system && it.load != null ? BW + it.load : null,
                   rir: it.rir, restSeconds: it.rest, purpose: it.purpose, perSide: !!it.perSide },
-            actual };
+            actual, performedLoad: performedLoad(logs?.[w]?.[d.id]?.[it.id]) };
           if (altChoice[key] && ALT[it.id]) o.subbed = ALT[it.id];
           if (it.load != null && !it.power) o.barSpeed = barSpeed[key] || "on-target";
           if (it.power) o.powerQuality = powerQual[key] || null;
           const note = exNotes[key]; if (note) o.note = note;
+          // An approved Saturday-review change on this row: what the plan said, and what it is now.
+          if (it.adjusted) o.adjusted = it.adjusted.map(a => ({ field: a.field, planned: a.planned, to: a.to, rule: a.rule }));
           return o;
         }),
       };
@@ -753,7 +786,7 @@ export default function ConcurrentBlockTracker() {
         if (!rows.length) continue;
         const prev = itemFor(pw, d.id, it.id);
         const rirs = rows.map(e => num(e.rir)).filter(x => x != null);
-        hist.push({ week: pw, load: prev ? prev.load : null,
+        hist.push({ week: pw, load: prev ? prev.load : null, performedLoad: performedLoad(rows),
           rirMin: rirs.length ? Math.min(...rirs) : null,
           barSpeed: barSpeed[`${pw}-${d.id}-${it.id}`] || "on-target",
           allSets: prev ? rows.length >= prev.sets : false });
@@ -764,7 +797,7 @@ export default function ConcurrentBlockTracker() {
     const wed = impactFor(w, "wed"), fri = impactFor(w, "fri");
     const highTotal = (wed?.high || 0) + (fri?.high || 0);
     return JSON.stringify({
-      app: "concurrent-block", kind: "week-report", version: 17, blockVersion: BLOCK_VERSION,
+      app: "concurrent-block", kind: "week-report", version: 18, blockVersion: BLOCK_VERSION,
       programId: PROGRAM_ID, source: SOURCE,
       week: w, phase: PHASE(w), badge: BADGE[w] || null, targetRir: TARGET_RIR(w), rirFloor: RIR_FLOOR(w),
       flags: { deload: REDUCED.has(w), testWeek: w === TEST_WEEK,
@@ -783,6 +816,7 @@ export default function ConcurrentBlockTracker() {
       days, history,
       tested: (w === TEST_WEEK || w === W13_WEEK) ? tested : undefined,
       autoFlags: { belowRirFloor: weekBelowFloor(w), adductorAbnormal: weekAdductorFlag(w) },
+      review: reviews[w] ? { status: reviews[w].status, decidedAt: reviews[w].decidedAt || null } : null,
     }, null, 2);
   };
 
@@ -815,6 +849,29 @@ export default function ConcurrentBlockTracker() {
       return r;
     });
   };
+
+  // Saturday review (spec §7.1): fetch the proposals for this calendar week and the next. A decided
+  // week is never replaced and another program's proposal is ignored (mergeProposals/isProposalFor).
+  // Runs through the same one-at-a-time queue as uploads; a missing file (404) is simply skipped.
+  const fetchProposals = () => {
+    if (!syncLoaded.current || !syncRef.current.token) return Promise.resolve(0);
+    return syncQueue(async () => {
+      const fetchImpl = typeof window.fetch === "function" ? window.fetch.bind(window) : null;
+      if (!fetchImpl || navigator.onLine === false) return 0;
+      lastProposalFetch.current = Date.now();
+      const cw = calendarWeek(new Date(), META.startDate, META.weeks);
+      const got = [];
+      for (const w of [cw, cw + 1]) {
+        if (w < 1 || w > META.weeks) continue;
+        const g = await ghGet(syncRef.current, proposalPath(w), fetchImpl);
+        if (g.status !== 200) continue;
+        try { const p = JSON.parse(g.text); if (isProposalFor(p, w)) got.push(p); } catch (e) { /* not JSON — ignore it */ }
+      }
+      if (got.length) setReviews(prev => mergeProposals(prev, got, new Date().toISOString()));
+      return got.length;
+    });
+  };
+
 
   // Trigger: a tissue check or note changed — upload 3 s later, while the app is still open.
   // This is what carries the Saturday-morning adductor check to the review.
@@ -887,10 +944,13 @@ export default function ConcurrentBlockTracker() {
   // Trigger: cold open (once both the training data and the sync config are loaded), and
   // right after a key is saved.
   const ready = status !== "loading";
-  useEffect(() => { if (ready && sync.token) doSync(); }, [ready, sync.token]);
+  useEffect(() => { if (ready && sync.token) doSync().then(() => fetchProposals()); }, [ready, sync.token]);
 
   // Trigger: Finish (or un-finish) a session.
   useEffect(() => { if (loaded.current) doSync(); }, [sessDone]);
+
+  // Trigger: the Saturday review state changed — a proposal arrived, or Approve / Decline / Undo.
+  useEffect(() => { if (loaded.current) doSync(); }, [reviews]);
 
   // Triggers: leaving the app and coming back. iOS freezes a home-screen app the moment it is
   // hidden, so this uploads now rather than on a timer. Set logs alone wait for the 10-minute
@@ -902,6 +962,8 @@ export default function ConcurrentBlockTracker() {
       if (!c.token) return;
       const recent = c.lastUpload && Date.now() - c.lastUpload < HIDDEN_THROTTLE_MS;
       if (priorityDirty.current || c.lastError || !recent) doSync();
+      // Back in the app: look for a new Saturday review, at most every 30 minutes.
+      if (document.visibilityState === "visible" && Date.now() - lastProposalFetch.current >= PROPOSAL_REFETCH_MS) fetchProposals();
     };
     // [ADDED] audit gap 1 — back from a dead spot with the app open: catch up at once.
     const onOnline = () => { if (syncRef.current.token) doSync(); };
@@ -1053,7 +1115,7 @@ export default function ConcurrentBlockTracker() {
           const f = {};
           if (tgt.w != null) f.w = String(tgt.w);
           if (tgt.r != null && tgt.r !== "") f.r = String(tgt.r);
-          if (Object.keys(f).length) setEntry(ex.id, i, f);
+          if (Object.keys(f).length && setEntry(ex.id, i, f) === false) return;   // the one-time prompt took it
           if (settings.autoRest) startRestById(ex.id);
         }}>Rx</button>
       </div>
@@ -1061,6 +1123,138 @@ export default function ConcurrentBlockTracker() {
   };
 
   const cutChip = (ex) => ex.cut ? <em className={`tag cut-${ex.cut}`}>{CUT_LABEL[ex.cut]}</em> : null;
+
+  /* ── Saturday review on the session screens (spec §7.4) ──
+     Alerts and notes are advisory and NEVER hidden by Decline. Suggestion lines show only while a
+     review is waiting; once approved, the changed card carries the "adjusted" chip instead. */
+  const reviewOf = (w) => (reviews[w] && reviews[w].proposal ? reviews[w] : null);
+  const startedDays = (w) => DAYS.filter(d => Object.values(logs?.[w]?.[d.id] || {})
+    .some(rows => Array.isArray(rows) && rows.some(e => e && (e.w || e.r)))).map(d => d.id);
+  const exName = (w, d, id) => SESSIONS[w]?.[d]?.items.find(i => i.id === id)?.name || id;
+  const reviewNotesFor = (exId) => {
+    const r = reviewOf(week);
+    return (r ? r.proposal.notes || [] : []).filter(n => n.day === day && n.id === exId).map((n, i) => (
+      <div className="revline" key={`rn-${exId}-${i}`}><b>Saturday review</b>{n.text}</div>
+    ));
+  };
+  const reviewSuggestionsFor = (exId) => {
+    const r = reviewOf(week);
+    if (!r || r.status !== "pending") return null;
+    return (r.proposal.changes || []).filter(c => c.day === day && c.id === exId).map((c, i) => (
+      <div className="revline sugg" key={`rs-${exId}-${i}`}><b>Saturday review suggests</b>{changeText(c)} — {c.why}</div>
+    ));
+  };
+  // Approve / Decline / Undo (spec §7.3) — behind the Settings switch until 2–3 real reviews looked right.
+  // The phone re-runs every rule with ITS OWN logs; the file's `check` is never trusted.
+  // [ADDED] audit gap 1 — a change whose `from` no longer matches the plan (program.js was edited
+  // after the review) is left out of the check and skipped at Approve; the rest still apply (§7.3).
+  const staleChanges = (w, changes) => changes.filter(c => {
+    const it = SESSIONS[w]?.[c.day]?.items.find(i => i.id === c.id);
+    return !it || plannedValue(it, c.field) !== c.from;
+  });
+  const recheckReview = (w) => {
+    const p = reviews[w].proposal, all = p.changes || [], stale = staleChanges(w, all);
+    return validateProposal({ ...p, changes: all.filter(c => !stale.includes(c)) }, {
+      sessions: SESSIONS, lastPerformedFor: (d, id) => lastPerformedFromLogs(logs, d, id, w) });
+  };
+  const approveReview = (w) => {
+    const r = reviewOf(w);
+    if (!settings.approveEnabled || !r || r.status !== "pending" || !recheckReview(w).ok) return;
+    // Late approval: a day that has already started stays as planned.
+    const res = applyChanges(SESSIONS, w, r.proposal.changes || [], { skipDays: new Set(startedDays(w)) });
+    setReviews(p => ({ ...p, [w]: { ...p[w], status: "approved", decidedAt: new Date().toISOString(), applied: res.applied,
+      skipped: res.skipped.map(s => ({ day: s.change.day, id: s.change.id, field: s.change.field, reason: s.reason })) } }));
+    flash(`Week ${w} updated — ${res.applied.length} change${res.applied.length === 1 ? "" : "s"} applied`);
+  };
+  const declineReview = (w) => setReviews(p => (p[w] && p[w].status === "pending"
+    ? { ...p, [w]: { ...p[w], status: "declined", decidedAt: new Date().toISOString(), applied: [], skipped: [] } } : p));
+  // Undo returns the review to "waiting" — only until the first set of that week is logged.
+  const undoReview = (w) => {
+    if (startedDays(w).length) return;
+    setReviews(p => {
+      if (!p[w] || p[w].status === "pending") return p;
+      const { applied, skipped, decidedAt, ...rest } = p[w];
+      return { ...p, [w]: { ...rest, status: "pending" } };
+    });
+  };
+  const renderReviewActions = (w) => {
+    const r = reviewOf(w), p = r.proposal, changes = p.changes || [];
+    const started = startedDays(w);
+    if (r.status !== "pending") {
+      const n = (r.applied || []).length, sk = r.skipped || [];
+      return (
+        <div className="rev-actions">
+          <p className="rev-note">{r.status === "approved"
+            ? `Approved — ${n} change${n === 1 ? "" : "s"} applied${sk.length ? `; ${sk.length} left as planned (${sk.map(s => `${WEEKDAYS[dayMap[s.day]]} ${exName(w, s.day, s.id)}: ${s.reason}`).join("; ")})` : ""}.`
+            : "Declined — the plan stays as written. Alerts and notes still show."}</p>
+          {!started.length && <button className="ghost sync-full" onClick={() => undoReview(w)}>Undo</button>}
+        </div>
+      );
+    }
+    if (p.status !== "proposed" || !changes.length) return null;
+    if (!settings.approveEnabled)
+      return <p className="rev-note">One-tap Approve is off: each suggestion shows on its exercise card and nothing in your plan changes. Turn it on in Settings once 2–3 reviews have looked right.</p>;
+    const chk = recheckReview(w);
+    const stale = staleChanges(w, changes);
+    const openDays = DAYS.map(d => d.id).filter(d => !started.includes(d));
+    return (
+      <div className="rev-actions">
+        {!chk.ok && <p className="rev-note bad">The phone's own check failed, so Approve is off for this review: {chk.failures.slice(0, 3).join("; ")}</p>}
+        {stale.length > 0 && <p className="rev-note">{stale.length} suggested change{stale.length === 1 ? " no longer matches" : "s no longer match"} your plan (it was edited after the review) and will be left as planned.</p>}
+        {chk.ok && started.length > 0 && <p className="rev-note">Some days have started — Approve changes only {openDays.length ? openDays.map(d => WEEKDAYS[dayMap[d]]).join(", ") : "nothing (every day has started)"}.</p>}
+        <div className="syncrow">
+          <button className="solid" onClick={() => approveReview(w)} disabled={!chk.ok}>Approve</button>
+          <button className="ghost" onClick={() => declineReview(w)}>Decline</button>
+        </div>
+      </div>
+    );
+  };
+  // The Next week card — a plain render function (never a component inside the app).
+  const renderReviewCard = (w) => {
+    const r = reviewOf(w);
+    if (!r) return null;
+    const p = r.proposal;
+    const alerts = [...(p.alerts || [])].sort((a, b) => (a.level === "stop" ? 0 : 1) - (b.level === "stop" ? 0 : 1));
+    const changes = p.changes || [];
+    const open = r.status === "pending" && (w === week + 1 || !!settings.approveEnabled);
+    return (
+      <details className="card reviewcard" key={`review-${w}`} data-week={w} open={open}>
+        <summary>
+          <span className="rev-title">Saturday review · plan for week {w}</span>
+          <span className={`rev-status st-${r.status}`}>{p.status === "proposed" ? REVIEW_STATUS[r.status] : p.status.replace("-", " ")}</span>
+        </summary>
+        <div className="rev-body">
+          {alerts.map((a, i) => (
+            <div key={i} className={`banner ${a.level === "stop" ? "alertbanner" : "soft"}`}>
+              <b>{a.level === "stop" ? "Stop" : a.level === "manual" ? "Needs your decision" : "Note"} · {(a.days || []).map(d => WEEKDAYS[dayMap[d]]).join(" + ")}:</b> {a.text}
+            </div>
+          ))}
+          {p.status === "no-data" && <p className="rev-p">No week report reached the review, so nothing was judged. Check Cloud sync in Settings, or use AI Analysis by hand.</p>}
+          {p.fatigueLevel != null && <p className="rev-p"><b>Fatigue level {p.fatigueLevel}</b> — {p.fatigueEvidence}</p>}
+          {p.summary && <p className="rev-p">{p.summary}</p>}
+          {(p.findings || []).length > 0 && <div className="rev-h">Findings</div>}
+          {(p.findings || []).map((f, i) => (
+            <div className="rev-row" key={`f${i}`}><span className="why">{f.kind === "hypothesis" ? "Hypothesis" : "Observation"}</span>{f.text}</div>
+          ))}
+          {changes.length > 0 && <div className="rev-h">Suggested changes</div>}
+          {changes.map((c, i) => (
+            <div className="rev-row" key={`c${i}`}>
+              <b>{WEEKDAYS[dayMap[c.day]]} · {exName(w, c.day, c.id)}</b> — {changeText(c)}
+              <span className="why">{c.why} Reverse if: {c.reverseIf}</span>
+            </div>
+          ))}
+          {(p.holds || []).length > 0 && <div className="rev-h">Held, not advanced</div>}
+          {(p.holds || []).map((h, i) => (
+            <div className="rev-row" key={`h${i}`}><b>{WEEKDAYS[dayMap[h.day]]} · {exName(w, h.day, h.id)}</b><span className="why">{h.why}</span></div>
+          ))}
+          {(p.notes || []).length > 0 && <p className="rev-note">{p.notes.length} coaching note{p.notes.length === 1 ? "" : "s"} — shown on the exercise cards and sessions of week {w}.</p>}
+          {p.status === "summary-only" && (p.check?.failures || []).length > 0 &&
+            <p className="rev-note bad">The review's own rules check failed, so it suggests no changes: {p.check.failures.slice(0, 3).join("; ")}</p>}
+          {renderReviewActions(w)}
+        </div>
+      </details>
+    );
+  };
 
   const cardHead = (ex, activeName, exDone, rx) => (
     <div className="ex-head">
@@ -1070,6 +1264,10 @@ export default function ConcurrentBlockTracker() {
           {altChoice[k3(ex.id)] && <em className="tag alt-tag">sub</em>}
           {ex.tag && <em className="tag">{ex.tag}</em>}
           {cutChip(ex)}
+          {ex.adjusted && (
+            <button className="tag adj-tag" aria-expanded={!!adjOpen[k3(ex.id)]} aria-label={`${activeName}: adjusted by the Saturday review`}
+              onClick={() => setAdjOpen(o => ({ ...o, [k3(ex.id)]: !o[k3(ex.id)] }))}>adjusted</button>
+          )}
         </div>
       </div>
       <div className="ex-actions">
@@ -1167,6 +1365,7 @@ export default function ConcurrentBlockTracker() {
         ))}
         <p className="cue"><b>Cut order:</b> {px.selectionRule}</p>
         <p className="cue"><b>Progression gate:</b> {px.gate}</p>
+        {reviewNotesFor("impact")}
         <input className="exnote" placeholder="Note — landing quality, actual time, next-morning response" value={exNotes[k3(ex.id)] || ""}
           onChange={e => { setExNotes(p => ({ ...p, [k3(ex.id)]: e.target.value })); touchPriority(); }} />
       </section>
@@ -1218,6 +1417,7 @@ export default function ConcurrentBlockTracker() {
         </div>
         <p className="cue"><b>Before running:</b> gentle adductor squeeze 3 × 20 s with 20 s between, at about 20–30% effort — activation, not strength work and not clearance.
           {" "}<b>Advancing:</b> two completed, tolerated runs at this exact terrain, distance, reps and effort, with a normal next day. A reduced session does not qualify a larger one. If a stage is held or skipped, later stages move back or disappear — never catch up.</p>
+        {reviewNotesFor("run")}
         <input className="exnote" placeholder="Note — how the reps felt, any stride change" value={lg.note || ""}
           onChange={e => setSp("note", e.target.value)} />
       </section>
@@ -1294,6 +1494,11 @@ export default function ConcurrentBlockTracker() {
           </div>
           {subbed && <span className="alt-note">alt for {ex.name}</span>}
         </div>
+        {reviewSuggestionsFor(ex.id)}
+        {ex.adjusted && adjOpen[k3(ex.id)] && ex.adjusted.map((a, i) => (
+          <div className="revline sugg" key={`adj-${i}`}><b>Adjusted by the Saturday review</b>{changeText({ field: a.field, from: a.planned, to: a.to })} — {a.why} Reverse if: {a.reverseIf}</div>
+        ))}
+        {reviewNotesFor(ex.id)}
         {rx.system && <div className="systemload">Total system load <b>{fmtLb(rx.system)} lb</b> — bodyweight {BW} + {fmtLb(rx.loadNum)} external. Thresholds use system load, never external load alone.</div>}
         {isTargetTest && <div className="banner soft">One target set. No retries. Stop the set before a grinder or before technique breaks — a grindy or invalid rep is a miss, not a lower result. If the earlier tests created meaningful fatigue, defer this one and record why.</div>}
         {ex.id === "ohptop" && week === 1 && <div className="banner soft">Calibration: ramp to a single at RPE 7.5–8.5 — 120 is the nominal figure, not a demand. Do not chase a maximum. Whatever the single shows, the back-off sets run at their prescribed load. A single's subjective reserve does not establish an exact e1RM.</div>}
@@ -1539,7 +1744,7 @@ export default function ConcurrentBlockTracker() {
       ) : (
         <>
           <div className="syncrow">
-            <button className="ghost" onClick={() => doSync()}>Sync now</button>
+            <button className="ghost" onClick={() => { doSync(); fetchProposals(); }}>Sync now</button>
             <button className="ghost" onClick={startCloudRestore}>Restore from cloud</button>
           </div>
           {sync.paused && <button className="ghost sync-full" onClick={forceUpload}>Keep this phone's data (overwrite cloud)</button>}
@@ -1547,6 +1752,34 @@ export default function ConcurrentBlockTracker() {
           <button className="ghost sync-full" onClick={turnOffSync}>Turn off sync</button>
         </>
       )}
+      <div className="set-label">Weekly reviews — from the Saturday routine</div>
+      {(() => {
+        const cw = calendarWeek(new Date(), META.startDate, META.weeks);
+        const ws = Object.keys(reviews).map(Number).filter(w => reviewOf(w)).sort((a, b) => b - a);
+        // From Sunday on, a calendar week with no proposal means the routine failed or was skipped.
+        const missing = !!sync.token && cw > 1 && !reviewOf(cw);
+        return (
+          <>
+            {missing && <div className="syncstatus t-warn">No review for week {cw} — use AI Analysis to review it by hand.</div>}
+            {!ws.length && !missing && <div className="syncstatus t-off">No Saturday reviews yet.</div>}
+            {ws.map(w => {
+              const r = reviews[w], n = (r.proposal.changes || []).length;
+              const when = r.decidedAt || r.proposal.createdAt;
+              return (
+                <div className="revhist" key={w}>
+                  <span>Week {w} · {r.proposal.status === "proposed" ? `${n} change${n === 1 ? "" : "s"}` : r.proposal.status.replace("-", " ")}</span>
+                  <span>{REVIEW_STATUS[r.status] || r.status}{when ? ` · ${new Date(when).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}</span>
+                </div>
+              );
+            })}
+          </>
+        );
+      })()}
+      <div className="toggle-row">
+        <span>One-tap Approve — turn on once 2–3 Saturday reviews have looked right</span>
+        <button className={`pill ${settings.approveEnabled ? "on" : ""}`} aria-pressed={!!settings.approveEnabled} aria-label="One-tap Approve"
+          onClick={() => setSettings(s => ({ ...s, approveEnabled: !s.approveEnabled }))}>{settings.approveEnabled ? "On" : "Off"}</button>
+      </div>
       <div className="set-label">Restore from backup</div>
       <textarea placeholder="Paste a backup JSON here…" value={restorePaste} onChange={e => setRestorePaste(e.target.value)} />
       <button className="solid full" onClick={restoreBackup} disabled={!restorePaste.trim()}>Restore</button>
@@ -1617,6 +1850,8 @@ export default function ConcurrentBlockTracker() {
 
       <main className="session">
         {settingsOpen && renderSettings()}
+        {/* Next week's review first (it arrives on Saturday), then this week's. */}
+        {week !== W13_WEEK && [week + 1, week].map(w => renderReviewCard(w))}
         {week === W13_WEEK ? renderWeek13() : !session ? <div className="cap-note">No session prescribed here.</div> : (
           <div>
             <div className="cap-note">
@@ -1642,6 +1877,30 @@ export default function ConcurrentBlockTracker() {
               <div className="ridenote"><b>Sequencing</b>{session.sequencing}</div>
               <div className="ridenote"><b>If short on time or recovery</b>{session.cuts}</div>
             </details>
+            {reviewPrompt === week && (
+              <div className="banner revprompt" role="alert">
+                <b>This week's Saturday review is waiting — look at it first?</b> Nothing was logged yet: once a day has started, Approve leaves that day as planned.
+                <div className="syncrow">
+                  <button className="solid" onClick={() => {
+                    setReviewPrompt(null);
+                    const el = document.querySelector(`.reviewcard[data-week="${week}"]`);
+                    if (el) { el.open = true; if (el.scrollIntoView) el.scrollIntoView({ block: "start" }); }
+                  }}>Show the review</button>
+                  <button className="ghost" onClick={() => setReviewPrompt(null)}>Log anyway</button>
+                </div>
+              </div>
+            )}
+            {/* Saturday review: alerts pinned to this day (stop first) and session notes — never hidden. */}
+            {(reviewOf(week)?.proposal.alerts || []).filter(a => (a.days || []).includes(day))
+              .sort((a, b) => (a.level === "stop" ? 0 : 1) - (b.level === "stop" ? 0 : 1)).map((a, i) => (
+              <div key={`ra${i}`} className={`banner ${a.level === "stop" ? "alertbanner" : "soft"} revpin`}>
+                <b>Saturday review{a.level === "stop" ? " — stop" : a.level === "manual" ? " — needs your decision" : ""}:</b> {a.text}
+              </div>
+            ))}
+            {reviewNotesFor("session")}
+            {(session.removed || []).map(it => (
+              <div className="revline" key={`rm-${it.id}`}><b>Skipped by the Saturday review</b>{it.name} — {(it.adjusted || []).map(a => a.why).join(" ")}</div>
+            ))}
             {addFlag && (
               <div className="banner alertbanner"><b>Adductor gate is open:</b> an abnormal check was logged this week. Running and high-tier jump progressions are held until it returns to normal. Movement-altering discomfort on its own means suspend the affected impact and get it looked at — do not wait for a second warning sign.</div>
             )}
@@ -1904,6 +2163,32 @@ const css = `
 .sync-full{width:100%;margin-top:8px;flex:none}
 .cloudrestore{margin-top:10px;padding:10px 12px;border:0.5px solid color-mix(in srgb,var(--accent) 10%,transparent);border-radius:9px;font-size:12.5px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
 .cloudrestore p{margin:0 0 8px}
+.reviewcard{padding:0;overflow:hidden}
+.reviewcard>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.reviewcard>summary::-webkit-details-marker{display:none}
+.rev-title{font-family:'Barlow Condensed';font-weight:700;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);overflow-wrap:anywhere}
+.rev-status{flex:none;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.rev-status.st-approved{color:var(--ok)}
+.rev-status.st-declined{color:var(--faint)}
+.rev-body{padding:0 14px 12px}
+.rev-p{font-size:12.5px;line-height:1.5;color:var(--ink);margin:0 0 8px;overflow-wrap:anywhere}
+.rev-p b{color:var(--accent)}
+.rev-h{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:10px 0 4px}
+.rev-row{font-size:12.5px;line-height:1.5;color:var(--ink);padding:6px 0;border-top:0.5px solid var(--line);overflow-wrap:anywhere}
+.rev-row .why{display:block;color:var(--muted);font-size:11.5px}
+.rev-note{font-size:11.5px;line-height:1.5;color:var(--muted);margin:8px 0 0;overflow-wrap:anywhere}
+.rev-note.bad{color:var(--warn)}
+.rev-actions{margin-top:4px}
+.revpin{margin:0 0 12px}
+.revline{border-left:3px solid var(--slate);background:var(--inputBg);border-radius:0 8px 8px 0;padding:7px 10px;margin:8px 0 0;font-size:12px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.revline b{display:block;color:var(--slate);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+.revline.sugg{border-left-color:var(--accent)}
+.revline.sugg b{color:var(--accent)}
+.revhist{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:6px 0;border-top:0.5px solid var(--line);color:var(--ink);overflow-wrap:anywhere}
+.revhist span:last-child{color:var(--faint);flex:none}
+.tag.adj-tag{border:0.5px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--accent);background:transparent;font-family:'Inter'}
+.revprompt{color:var(--ink)}
+.revprompt b{color:var(--accent)}
 .swatches{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 .swatch{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px;border:0.5px solid color-mix(in srgb,var(--accent) 6%,transparent);border-radius:10px}
 .swatch.on{border-color:var(--accent)}

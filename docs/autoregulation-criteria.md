@@ -224,6 +224,13 @@ week-13 result is labelled week 13 and never becomes a week-12 achievement.
 
 ## 9. Applying an accepted change
 
+**Most weekly changes now arrive through the app (October 2026).** The Saturday routine writes a
+proposal and Brian approves it on the phone; Approve applies only the six change kinds of the
+review spec §6.1 (load, sets, skipping the Friday incline, reps, easier reserve, longer priority
+rest), for one week, as a layer over `src/program.js` — the file itself is untouched. Anything
+else (a swap, frequency, a deload, a permanent edit) is still a Claude Code session editing
+`src/program.js` as below.
+
 Edit `src/program.js` — it is the single edit point for every prescription. Then:
 
 ```bash

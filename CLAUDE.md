@@ -49,6 +49,10 @@ src/App.jsx                          ← the app: logic, UI, CSS (one file, by d
 src/program.js                       ← GENERATED prescriptions — the single edit point for loads
 src/entry.jsx                        ← mount + localStorage shim for window.storage
 src/sync.js                          ← cloud sync to the private Workout-Data repo (no React; spec §4)
+src/review.js                        ← Saturday-review rules: change rules, rails, effective table (no React; spec §6)
+tools/week-context.mjs               ← routine tool: what each exercise may change to next week
+tools/check-proposal.mjs             ← routine tool: checks a proposal (exit 0/1); fixtures in tools/fixtures/
+tools/make-practice.mjs              ← builds the routine's four synthetic practice weeks
 tools/gen-program.mjs                ← one-shot: V3 source JSON → src/program.js
 tools/gen-block-doc.mjs              ← one-shot: source narrative → the program doc, with a cross-check
 docs/12-week-concurrent-block-v5.md  ← THE PROGRAM (source of truth)
@@ -120,7 +124,7 @@ Two rules make it safe, and `tools/gen-program.mjs` now ASSERTS both:
 `window.storage.get/set` (async, `{key, value}` shape, `get` THROWS on missing key).
 `src/entry.jsx` shims it onto localStorage. Storage key: **`pp-tracker-v3`** — kept across all
 four programs deliberately, so no user data is destroyed by a program change. **Never change
-it.** One debounced (700 ms) save of a single JSON bundle. Backup `version` is now **16**; the week report is version **17**. Cloud sync keeps its own key, **`pp-sync-v1`** (the GitHub key, cached shas, status). It is never written into `pp-tracker-v3`, Copy backup, `data/bundle.json` or a report — test.mjs block 15 asserts it.
+it.** One debounced (700 ms) save of a single JSON bundle. Backup `version` is now **17** (adds `reviews`); the week report is version **18** (adds `performedLoad`, `adjusted`, `review`). Cloud sync keeps its own key, **`pp-sync-v1`** (the GitHub key, cached shas, status). It is never written into `pp-tracker-v3`, Copy backup, `data/bundle.json` or a report — test.mjs block 15 asserts it.
 
 **THE PROGRAM-COLLISION MIGRATION (do not remove).** Every saved bundle is stamped
 `program: "astra-synthesis-v5"` (`PROGRAM_ID`). A bundle carrying a different id was written by
@@ -154,6 +158,13 @@ border. `.app button` no longer sets `border` or `color`. Truly borderless butto
 in place, and the suite would then pass against the old bundle. `test.mjs` refuses to run if the
 bundle is older than `src/App.jsx`, `src/program.js`, `src/entry.jsx`, `src/sync.js` or `build.mjs`. This caught
 a real false pass during the v2.0 rewrite — do not remove it.
+
+**THE EFFECTIVE TABLE (Saturday review, Phase 3).** `sessionFor()` is the app's ONLY read of
+`SESSIONS`, and it serves a module-level `effectiveSessions` that the component republishes on every
+render from `buildEffective(SESSIONS, reviews)`. Approved review changes therefore reach the set
+grid, Rx, placeholders, rest timer, volume audit, week strip and report without touching
+`program.js`. Never read `SESSIONS[...]` directly in the app — go through `sessionFor`. Approve is
+behind **Settings → One-tap Approve** (off by default) until Brian has seen 2–3 real reviews.
 
 **THE `.rx` OVERFLOW TRAP (fixed twice).** The prescription line must wrap. In v2.0,
 `white-space:nowrap` on `.rx` produced 66px of horizontal overflow at 375px. In v3.0 the same
@@ -268,7 +279,7 @@ disagrees with the V3 source or its verification.
 
 ## Weekly AI-review loop
 
-The **AI Analysis** button copies a structured week report (`buildReviewJSON`, version 17) to
+The **AI Analysis** button copies a structured week report (`buildReviewJSON`, version 18) to
 the clipboard: prescribed vs actual per lift with system loads, bar speed, power quality,
 `countsTowardFloors` per row, impact contacts by tier with each day's cap type and
 allowance, running reps and metres against the ceiling, adductor checks, the live volume
@@ -276,6 +287,13 @@ audit, minute budgets against the 75-minute hard limit, and trailing history per
 Code, which applies `docs/autoregulation-criteria.md`, returns a plain-language brief, and — on
 approval — edits `src/program.js` and deploys. A text report is also available in Settings. The app's only network calls are cloud sync (§ Cloud sync below),
 and only once Brian has saved a key — with no key it makes none (test.mjs block 15a).
+
+**Since October 2026 the review also runs by itself.** Every Saturday at 14:07 (America/New_York) the
+cloud routine "Weekly training review" (Opus 5.5) reads the private `Workout-Data` repo, follows
+`Workout-Data/CLAUDE.md` (which applies this repo's brain via `tools/week-context.mjs` and
+`tools/check-proposal.mjs`), and writes `proposals/week-NN.json`. The app shows it as a Next week
+card with alerts and notes pinned to the right days and cards; Approve applies the spec §6.1
+changes for that one week. The copy-paste path above stays as the fallback.
 
 ## Cloud sync (Phase 1 of the weekly AI review)
 
@@ -291,7 +309,7 @@ public Workout-Plan repo.**
 
 ## Backlog / next steps
 
-1. Patch-schema override layer so a Claude review can write next week's prescriptions directly.
+1. ~~Patch-schema override layer~~ — done (Oct 2026): approved Saturday-review changes apply on the phone (`src/review.js`, `sessionFor`).
 2. Cycle 2: regenerate the block from the week-12 test results.
 3. Optional PWA hardening: manifest + service worker for offline.
 4. Optional: pin specific YouTube video IDs if Brian supplies links (▶ currently opens a search).
@@ -305,4 +323,4 @@ zero-minute warm-up header, partial Rx fill), walks all 48 sessions plus week 13
 errors, and enforces every program invariant above. Extend it
 when you add features. The one thing it cannot do is layout: check 375px overflow in a real
 browser by hand. Blocks 14–15 cover cloud sync with a fake GitHub (`fakeGitHub` in test.mjs) — engine unit
-tests and app-level triggers, privacy, Settings and Restore from cloud.
+tests and app-level triggers, privacy, Settings and Restore from cloud. Blocks 16–19 cover the Saturday review: the rules and rails (16), the routine's tools and fixtures (17), the read-only card, pins and fetch (18), and Approve/Decline/Undo, late approval, the phone's re-check, the one-time prompt, report v18, the week strip and the migration (19).
