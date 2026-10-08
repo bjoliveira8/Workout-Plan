@@ -49,6 +49,7 @@ src/App.jsx                          ← the app: logic, UI, CSS (one file, by d
 src/program.js                       ← GENERATED prescriptions — the single edit point for loads
 src/entry.jsx                        ← mount + localStorage shim for window.storage
 src/sync.js                          ← cloud sync to the private Workout-Data repo (no React; spec §4)
+tools/amend-a4.mjs                   ← one-off record of amendment A4 (OHP to Sunday, DB row to Monday, from week 3)
 src/review.js                        ← Saturday-review rules: change rules, rails, effective table (no React; spec §6)
 tools/week-context.mjs               ← routine tool: what each exercise may change to next week
 tools/check-proposal.mjs             ← routine tool: checks a proposal (exit 0/1); fixtures in tools/fixtures/
@@ -91,6 +92,15 @@ applied to v4.0-syn2 by `applyAmendments`; V3 carries their resolved form, decid
   kettlebell complex** (approved exception E11).
 `tools/gen-block-doc.mjs` refuses to publish the program document unless all three
 resolutions are present, and `test.mjs` asserts each one.
+
+**AMENDMENT A4 (Brian, 8 Oct 2026) is applied in `src/program.js`, not in the source.** From week 3 the
+moderate OHP is on **Sunday** (after the dips, before the paused bench) and Sunday's one-arm
+chest-supported DB row is on **Monday** (after the deadlifts); weeks 1–2 ran as written. Each moved
+with its timed blocks, so minutes and the 3:00-rest figure were recomputed (worst case 74.0 of 75).
+`tools/amend-a4.mjs` made the edit (it refuses to run twice); `test.mjs` block 20 guards it, and in
+week 3 only, LAST WK reads each exercise's pre-move day (`prevDayFor` in App.jsx). The program
+document carries an A4 note — `tools/gen-block-doc.mjs` would now report the moved rows as a
+disagreement, so do not regenerate the document without carrying A4 into the source first.
 
 **The program is generated, the app is hand-written.** `src/program.js` is emitted once by
 `tools/gen-program.mjs` from `docs/source/SYNTHESIZED_PRESCRIPTIONS_V3.json` (48 sessions, 464 rows,

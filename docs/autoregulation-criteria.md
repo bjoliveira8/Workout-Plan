@@ -171,9 +171,9 @@ shorten a priority rest below 2:00 (squat/deadlift 2:30). If protected work repe
 ### Cut order by day (normal weeks)
 
 - **Sunday** — power sets 3–4 → 3rd biceps set → 3rd bench set (press stays ≥16). Never cut:
-  dip work, row sets, both core sets, cable ER, the carry.
-- **Monday** — power sets 3–4 → 3rd triceps set → 3rd calf set. Never cut: pull-up, deadlift
-  and OHP work, both lunge sets, Copenhagen, both Pallof sets.
+  dip work, OHP work sets (moved here in week 3, amendment A4), both core sets, cable ER, the carry.
+- **Monday** — power sets 3–4 → 3rd triceps set → 3rd calf set. Never cut: pull-up and deadlift
+  work, row sets (moved here in week 3, amendment A4), both lunge sets, Copenhagen, both Pallof sets.
 - **Wednesday** — power pairs 3–4 → 3rd biceps set. Never cut: OHP and pull-up work, row
   sets, face pulls, both core sets, the carry.
 - **Friday** — power sets 3–4 → 3rd triceps set → 3rd calf set → skip DB incline bench

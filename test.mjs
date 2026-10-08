@@ -1501,6 +1501,37 @@ const rvWeight = (docX, exId) => docX.querySelector(`.card[data-exid="${exId}"] 
     d.window.close(); }
 }
 
+// 20) AMENDMENT A4 (Brian, 8 Oct 2026) — from week 3 the moderate OHP lives on Sunday (after the dips,
+//     before the bench) and the chest-supported DB row on Monday (after the deadlifts). Weeks 1–2 stay
+//     as logged. In the first week after the move, LAST WK reads the day each exercise lived on before.
+{
+  const { SESSIONS: SS } = await import("./src/program.js");
+  const ids = (w, d) => SS[w][d].items.map((i) => i.id);
+  for (const w of [1, 2]) if (!ids(w, "mon").includes("ohp") || !ids(w, "sun").includes("row")) fail.push(`a4-touched-week-${w}`);
+  for (let w = 3; w <= 12; w++) {
+    const sun = ids(w, "sun"), mon = ids(w, "mon");
+    if (mon.includes("ohp") || !sun.includes("ohp") || sun.includes("row") || !mon.includes("row")) { fail.push(`a4-not-moved-w${w}`); continue; }
+    const lastDip = Math.max(sun.lastIndexOf("dipheavy"), sun.lastIndexOf("dipback"), sun.lastIndexOf("dip"));
+    if (sun.indexOf("ohp") !== lastDip + 1 || sun.indexOf("bench") !== sun.indexOf("ohp") + 1) fail.push(`a4-sunday-order-w${w}=${sun.join(",")}`);
+    if (mon.indexOf("row") !== Math.max(mon.lastIndexOf("dl"), mon.lastIndexOf("dlback")) + 1) fail.push(`a4-monday-order-w${w}=${mon.join(",")}`);
+    const sb = SS[w].sun.blocks.map((b) => b.name), mb = SS[w].mon.blocks.map((b) => b.name);
+    if (!sb.includes("Moderate OHP work") || sb.includes("Row") || mb.includes("Moderate OHP work") || !mb.includes("Row")) fail.push(`a4-blocks-w${w}`);
+    if (/rows/.test(SS[w].sun.objective) || !/rows/.test(SS[w].mon.objective)) fail.push(`a4-objective-w${w}`);
+    if (/row sets/.test(SS[w].sun.cuts) || /OHP work sets/.test(SS[w].mon.cuts)) fail.push(`a4-cuts-w${w}`);
+  }
+  // LAST WK in week 3: Sunday's OHP shows last Monday's OHP; Monday's row shows last Sunday's row.
+  const d = new JSDOM(html, { url: "http://localhost/", pretendToBeVisual: true, runScripts: "dangerously",
+    beforeParse(w) { w.localStorage.setItem("pp-tracker-v3", JSON.stringify({ program: "astra-synthesis-v5", version: 17, week: 3, day: "sun", settings: {},
+      logs: { 2: { mon: { ohp: [{ w: "102.5", r: "4" }] }, sun: { row: [{ w: "45", r: "8" }] } } } })); } });
+  await new Promise((r) => setTimeout(r, 1400));
+  const prevOf = (exId) => d.window.document.querySelector(`.card[data-exid="${exId}"] .set-row .prev`)?.textContent;
+  if (prevOf("ohp") !== "102.5×4") fail.push("a4-last-week-ohp=" + prevOf("ohp"));
+  [...d.window.document.querySelectorAll(".tab")].find((b) => b.textContent.includes("MON")).click();
+  await new Promise((r) => setTimeout(r, 200));
+  if (prevOf("row") !== "45×8") fail.push("a4-last-week-row=" + prevOf("row"));
+  d.window.close();
+}
+
 if (fail.length) { console.error("FAIL: " + fail.join(", ")); process.exit(1); }
 console.log("✓ all smoke tests and program invariants passed");
 // The app's own intervals (rest TimerBar, SessionClock) keep jsdom's event loop alive,

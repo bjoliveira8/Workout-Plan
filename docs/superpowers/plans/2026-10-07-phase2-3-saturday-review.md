@@ -1997,7 +1997,9 @@ Everything else is identical to live mode.
    → `reviews["{forWeek}"].status` is `approved` or `declined`, stop.
 4. **No report?** If `reports/week-{N}.json` is missing (practice: `practice/<name>/report.json`),
    write a `no-data` proposal (shape below) and go to step 7 (check it without a report). If it
-   exists, its `week` must equal N — otherwise stop.
+   exists, its `week` must equal N — otherwise stop. A **version 17** report (the phone's app not
+   yet updated) is fine: it only lacks `performedLoad`, so the tools treat the last performed load
+   as unknown and allow loads down to two steps under the plan. Carry on, and say so in a finding.
 5. **Read.** Run `node PLAN/tools/week-context.mjs <forWeek> <report>`: it lists every exercise of
    forWeek that a change may touch, with the planned values and the ONLY values allowed — copy
    `from` values exactly from it. Then read, in this order: `PLAN/docs/autoregulation-criteria.md`
@@ -2020,10 +2022,12 @@ Everything else is identical to live mode.
    ```bash
    git add proposals/week-XX.json
    git commit -m "review: week N → proposal for week N+1"
-   git pull --rebase origin main && git push origin main
+   git pull --rebase origin main && git push origin HEAD:main
    ```
-   If the push is refused, `git pull --rebase origin main` and push again (the phone may have
-   synced meanwhile). Practice mode: write the file only.
+   The run starts on its own `claude/…` branch, so always push with `HEAD:main` — the app reads
+   `main` only. If the push is refused, `git pull --rebase origin main` and push again (the phone
+   may have synced meanwhile). Then confirm with `git ls-remote origin main` that `main` now points
+   at your commit. Practice mode: write the file only.
 9. **Report** in three lines: the week reviewed, the status, the number of changes.
 
 ## The proposal file

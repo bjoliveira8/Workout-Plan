@@ -45,9 +45,9 @@ const syncQueue = createQueue();
 
 /* The four day shells. Everything else about a session comes from SESSIONS[week][day]. */
 const DAYS = [
-  { id:"sun", lift:"DIP", title:"Dip priority, bench and rows",
+  { id:"sun", lift:"DIP", title:"Dip priority, OHP and bench",
     ride:"AM: the prescribed long ride. Strength starts at least 6 h after the ride FINISHES. Six hours is scheduling separation, not proof of recovery — if the gap cannot be made, reduce or omit this session and log the missed volume." },
-  { id:"mon", lift:"PULL / DL", title:"Pull-up, deadlift and moderate OHP",
+  { id:"mon", lift:"PULL / DL", title:"Pull-up, deadlift and rows",
     ride:"No ride today. Deadlift sits on a fixed weekday — this is the only conventional pull of the week." },
   { id:"wed", lift:"OHP", title:"Impact, then overhead press priority",
     ride:"Tuesday's prescribed ride. A previous-day ride does not automatically disqualify impact; residual fatigue or altered mechanics does." },
@@ -55,6 +55,13 @@ const DAYS = [
     ride:"Thursday's recovery ride must actually be easy — the week-12 and week-13 assessment gates require it. Any optional Friday ride goes after all impact and lifting." },
 ];
 const DAY_BY_ID = Object.fromEntries(DAYS.map(d => [d.id, d]));
+
+/* Amendment A4 (Brian, 8 Oct 2026): from week 3 the moderate OHP lives on Sunday and the chest-
+   supported DB row on Monday (tools/amend-a4.mjs). In that first week, LAST WK and last week's note
+   read the day each exercise lived on BEFORE the move, so the gym reference is not blank. */
+const A4_FROM_WEEK = 3;
+const A4_PREV_DAY = { "sun-ohp": "mon", "mon-row": "sun" };
+const prevDayFor = (week, day, exId) => (week === A4_FROM_WEEK && A4_PREV_DAY[`${day}-${exId}`]) || day;
 
 /* Substitutions permitted without review (§17). Primary lifts have none by design.
    Each item also carries its own `fallback` from the plan, which the card shows; this
@@ -1090,7 +1097,7 @@ export default function ConcurrentBlockTracker() {
   /* ── render functions (plain calls, stable element identity — inputs never lose focus) ── */
   const renderSetRow = (ex, rx, i) => {
     const cur = logs?.[week]?.[day]?.[ex.id]?.[i] || {};
-    const prev = week > 1 ? fmtPrev(logs?.[week-1]?.[day]?.[ex.id]?.[i]) : null;
+    const prev = week > 1 ? fmtPrev(logs?.[week-1]?.[prevDayFor(week, day, ex.id)]?.[ex.id]?.[i]) : null;
     const rirVal = cur.rir ?? "";
     const own = rirTarget(rx.rir, week);
     const floor = own != null ? own : RIR_FLOOR(week);
@@ -1474,7 +1481,7 @@ export default function ConcurrentBlockTracker() {
     const activeName = subbed ? alt : ex.name;
     const isPrimary = rx.loadNum != null;
     const isTargetTest = isTestSession(week, day) && /target test/i.test(ex.name);
-    const prevNote = week > 1 ? exNotes[`${week-1}-${day}-${ex.id}`] : null;
+    const prevNote = week > 1 ? exNotes[`${week-1}-${prevDayFor(week, day, ex.id)}-${ex.id}`] : null;
     return (
       <section className={`card ${isPrimary ? "main" : ""} ${exDone ? "exdone" : ""} ${dragId === ex.id ? "dragging" : ""}`} key={ex.id} data-exid={ex.id}>
         {cardHead(ex, activeName, exDone, rx)}

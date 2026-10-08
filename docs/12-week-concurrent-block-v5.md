@@ -73,6 +73,8 @@ every week's press/vertical/horizontal count agrees; the source verification rep
 
 **Approved design decisions (Brian, September 23, 2026):** see [V3_REVISION_PROPOSAL.md](source/V3_REVISION_PROPOSAL.md) §3. **Earlier approvals still in force:** C01 (12 Monday deadlifts), C02 (10 heavy + 2 light), C04 (named entry/restoration doses), C05 (two tolerated exposures per sprint stage), C06 (lower-body work only Monday/Friday), C07/C08 (target-rep tests), C09 (deload volume). C03 (broad-jump test exceptions) and C10 (15-minute Friday impact ladder) no longer apply. **App coaching amendments (Sep 22):** A2 (week-11 dip back-offs 3×6 @ +47.5) is applied; A1's calf work and 2-set single-leg RDL are covered by V3; A1's Monday lying leg curl is **not** included (Brian, Sep 24: avoid machines such as the hamstring curl) — a watch item for the faster sprint weeks 8–11, when hamstring load rises; A3 is applied in full: no broad-jump measurement, and week-12 Friday carries no power work and no KB complex (Brian, Sep 24; exception E11).
 
+**Amendment A4 (Brian, October 8, 2026):** from week 3, the moderate OHP moves from Monday to **Sunday** — after the dips, before the paused bench (a goal lift outranks bench) — and Sunday's one-arm chest-supported dumbbell row moves to **Monday**, after the deadlifts. Each keeps its sets, reps, loads, rests and timed blocks; weekly volumes, floors and the press:pull ratio are unchanged, and every session still plans at ≤ 73.5 minutes and ≤ 75 with every priority rest at 3:00 (Sunday's worst case is 74.0). Weeks 1–2 ran as written. Applied in `src/program.js` by `tools/amend-a4.mjs`; the session tables below still show the original Monday OHP / Sunday row layout.
+
 **Approved exceptions:**
 
 | ID | Rule | Exception |
